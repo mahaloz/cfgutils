@@ -3,11 +3,12 @@ import logging
 from typing import List, Optional, Union
 
 import networkx
-from angr.utils.graph import dfs_back_edges, subgraph_between_nodes, dominates, shallow_reverse
-from angr.analyses.cfg.cfg_utils import CFGUtils
 
 from .graph_region import GraphRegion
 from ..data.generic_block import GenericBlock
+from ..dominator import dfs_back_edges, subgraph_between_nodes, dominates, shallow_reverse
+from ..sorting import quasi_topological_sort_nodes
+
 
 l = logging.getLogger(name=__name__)
 
@@ -165,7 +166,7 @@ class RegionIdentifier:
     def _find_loop_headers(self, graph: networkx.DiGraph) -> List:
 
         heads = {t for _, t in dfs_back_edges(graph, self._start_node)}
-        return CFGUtils.quasi_topological_sort_nodes(graph, heads)
+        return quasi_topological_sort_nodes(graph, heads)
 
     def _find_initial_loop_nodes(self, graph: networkx.DiGraph, head):
         # TODO optimize
@@ -220,7 +221,7 @@ class RegionIdentifier:
         # node.
         subgraph = networkx.DiGraph()
 
-        sorted_refined_exit_nodes = CFGUtils.quasi_topological_sort_nodes(graph, refined_exit_nodes)
+        sorted_refined_exit_nodes = quasi_topological_sort_nodes(graph, refined_exit_nodes)
         while len(sorted_refined_exit_nodes) > 1 and new_exit_nodes:
             # visit each node in refined_exit_nodes once and determine which nodes to consider as loop nodes
             candidate_nodes = {}
@@ -254,7 +255,7 @@ class RegionIdentifier:
 
             sorted_refined_exit_nodes += list(new_exit_nodes)
             sorted_refined_exit_nodes = list(set(sorted_refined_exit_nodes))
-            sorted_refined_exit_nodes = CFGUtils.quasi_topological_sort_nodes(graph, sorted_refined_exit_nodes)
+            sorted_refined_exit_nodes = quasi_topological_sort_nodes(graph, sorted_refined_exit_nodes)
 
         refined_exit_nodes = set(sorted_refined_exit_nodes)
         refined_loop_nodes = refined_loop_nodes - refined_exit_nodes
