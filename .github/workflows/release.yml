@@ -9,6 +9,7 @@ jobs:
 
   release-github:
     name: Create Github Release
+    permissions: write-all
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
