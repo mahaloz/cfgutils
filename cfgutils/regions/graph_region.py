@@ -119,10 +119,10 @@ class GraphRegion:
                 nodes_map[node] = node
             else:
                 # make recursive copies
-                if type(node) is GraphRegion:
+                if isinstance(node, GraphRegion):
                     new_node = node.recursive_copy(nodes_map=nodes_map)
                     nodes_map[node] = new_node
-                elif type(node) is GenericBlock:
+                elif isinstance(node, GenericBlock):
                     new_node = node.copy()
                     nodes_map[node] = new_node
                 else:
@@ -142,7 +142,7 @@ class GraphRegion:
 
     @staticmethod
     def dbg_get_repr(obj, ident=0):
-        if type(obj) is GraphRegion:
+        if isinstance(obj, GraphRegion):
             s = obj.dbg_print(ident=ident)
         else:
             s = " " * ident + str(obj)

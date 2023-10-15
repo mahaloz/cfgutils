@@ -1,40 +1,59 @@
-from typing import List
+from typing import List, Optional
 
 
 class GenericBlock:
-    def __init__(self, addr, data=None):
+    def __init__(
+        self, addr: int, statements: List = None, idx: Optional[int] = None, is_entrypoint: bool = False,
+        is_exitpoint: bool = False, is_merged_node=False
+    ):
         self.addr = addr
-        self.data = data
+        self.statements = statements or []
+        self.idx = idx
+        self.is_entrypoint = is_entrypoint
+        self.is_exitpoint = is_exitpoint
+        self.is_merged_node = is_merged_node
+
+        self._idx_str = "" if self.idx is None else f".{self.idx}"
 
     def __eq__(self, other):
-        return type(other) == type(self) and self.addr == other.addr and \
-            self.data == other.data
+        return type(other) == self.__class__ and self.addr == other.addr and self.statements == other.statements
 
     def __hash__(self):
-        return hash(f"{self.addr}{self.data}")
+        return hash(f"{self.addr}{self.idx}{[d for d in self.statements]}")
 
     def __repr__(self):
-        return f"<{self.__class__.__name__}: {self.addr}>"
+        return f"<Block: {self.addr}{self._idx_str}>"
 
     def __str__(self):
-        return f"{self.addr}:\n{self.data}"
+        output = f"{self.addr}{self._idx_str}:\n"
+        output += str(self.statements)
+        return output
 
     def copy(self):
-        return GenericBlock(
+        return self.__class__(
             self.addr,
-            data=self.data.copy() if self.data else None
+            statements=self.statements.copy() if self.statements is not None else None,
+            idx=self.idx,
         )
 
-    @staticmethod
-    def merge_blocks(block1: "GenericBlock", block2: "GenericBlock"):
-        new_node = block1
-        new_node.data += block2.data
+    def contains_addr(self, addr):
+        if self.addr == addr:
+            return True
 
-    @staticmethod
-    def merge_many_blocks(start_addr, nodes: List["GenericBlock"]):
+    @classmethod
+    def merge_blocks(cls, block1: "GenericBlock", block2: "GenericBlock"):
+        new_node = block1.copy()
+        new_node.statements += block2.statements
+        new_node.is_entrypoint |= block2.is_entrypoint
+        new_node.is_exitpoint |= block2.is_exitpoint
+        new_node.is_merged_node = True
+        return new_node
+
+    @classmethod
+    def merge_many_blocks(cls, start_addr, nodes: List["GenericBlock"]):
         new_node = nodes[0].copy()
         new_node.addr = start_addr
         for node in nodes[1:]:
-            new_node.data += node.data
+            new_node = cls.merge_blocks(new_node, node)
 
         return new_node
