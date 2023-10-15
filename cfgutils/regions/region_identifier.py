@@ -19,12 +19,22 @@ class RegionIdentifier:
     """
 
     def __init__(
-            self,
-            graph,
-            largest_successor_tree_outside_loop=True,
-            complete_successors=False,
+        self,
+        graph,
+        largest_successor_tree_outside_loop=True,
+        complete_successors=False,
+        block_cls=None
     ):
         self._graph = graph
+        if block_cls is not None:
+            self._block_cls = block_cls
+        else:
+            node = list(self._graph)[0]
+            self._block_cls = node.__class__
+
+        if not issubclass(self._block_cls, GenericBlock):
+            raise ValueError("Graph must contain nodes that are subclasses of GenericBlock!")
+
         self.regions_by_block_addrs = []
 
         self.region = None
@@ -53,7 +63,7 @@ class RegionIdentifier:
             # HACK: FIXME: for infinite loop nodes, this would return an empty set, so we include the loop body itself
             # Make sure this makes sense (EDG thinks it does)
             if (node, node) in graph.edges:
-                subgraph.add_edge(node, node)
+                subgraph.add_edge(node, node, src=node, dst=node)
         return subgraph
 
     def _analyze(self):
@@ -183,7 +193,7 @@ class RegionIdentifier:
                     for succ in nonself_successors:
                         if not loop_subgraph.has_edge(node, succ):
                             updated = True
-                            loop_subgraph.add_edge(node, succ)
+                            loop_subgraph.add_edge(node, succ, src=node, dst=succ)
             if not updated:
                 break
 
@@ -251,7 +261,7 @@ class RegionIdentifier:
                 to_add = set(graph.successors(n)) - refined_loop_nodes
                 new_exit_nodes |= to_add
                 for succ in to_add:
-                    subgraph.add_edge(n, succ)
+                    subgraph.add_edge(n, succ, src=n, dst=succ)
 
             sorted_refined_exit_nodes += list(new_exit_nodes)
             sorted_refined_exit_nodes = list(set(sorted_refined_exit_nodes))
@@ -484,7 +494,7 @@ class RegionIdentifier:
             graph_copy = networkx.DiGraph(graph_copy)
             dummy_endnode = "DUMMY_ENDNODE"
             for endnode in endnodes:
-                graph_copy.add_edge(endnode, dummy_endnode)
+                graph_copy.add_edge(endnode, dummy_endnode, src=endnode, dst=dummy_endnode)
             endnodes = [dummy_endnode]
         else:
             dummy_endnode = None
@@ -513,7 +523,7 @@ class RegionIdentifier:
                 # so we transform it into one, if necessary
                 if graph_copy.in_degree(node) == 0 and not isinstance(node, GraphRegion):
                     subgraph = networkx.DiGraph()
-                    subgraph.add_node(node)
+                    subgraph.add_node(node, node=node)
                     self._abstract_acyclic_region(
                         graph, GraphRegion(node, subgraph, None, None, False, None), [], secondary_graph=secondary_graph
                     )
@@ -535,7 +545,7 @@ class RegionIdentifier:
                                         original_successors = secondary_graph.successors(nn)
                                         for succ in original_successors:
                                             if not region.graph_with_successors.has_edge(nn, succ):
-                                                region.graph_with_successors.add_edge(nn, succ)
+                                                region.graph_with_successors.add_edge(nn, succ, src=nn, dst=succ)
                                                 region.successors.add(succ)
                                 else:
                                     for nn in list(region.graph_with_successors.nodes):
@@ -544,7 +554,7 @@ class RegionIdentifier:
                                             if succ not in graph_copy:
                                                 # the successor wasn't added to the graph because it does not belong
                                                 # to the frontier. we backpatch the successor graph here.
-                                                region.graph_with_successors.add_edge(nn, succ)
+                                                region.graph_with_successors.add_edge(nn, succ, src=nn, dst=succ)
                                                 region.successors.add(succ)
 
                             # l.debug("Walked back %d levels in postdom tree.", levels)
@@ -617,7 +627,7 @@ class RegionIdentifier:
             if node_ in frontier:
                 continue
             traversed.add(node_)
-            subgraph.add_node(node_)
+            subgraph.add_node(node_, node=node_)
 
             for succ in graph.successors(node_):
                 edge_data = graph.get_edge_data(node_, succ)
@@ -626,7 +636,7 @@ class RegionIdentifier:
                     if include_frontier:
                         # if frontier nodes are included, do not keep traversing their successors
                         # however, if it has an edge to an already traversed node, we should add that edge
-                        subgraph.add_edge(node_, succ, **edge_data)
+                        subgraph.add_edge(node_, succ, src=node_, dst=succ)
                     else:
                         frontier_edges.append((node_, succ, edge_data))
                     continue
@@ -639,7 +649,7 @@ class RegionIdentifier:
                         # skip all frontier nodes
                         frontier_edges.append((node_, succ, edge_data))
                         continue
-                subgraph.add_edge(node_, succ, **edge_data)
+                subgraph.add_edge(node_, succ, src=node_, dst=succ)
                 if succ in traversed:
                     continue
                 queue.append(succ)
@@ -651,7 +661,7 @@ class RegionIdentifier:
             subgraph_with_frontier = networkx.DiGraph(subgraph)
             for src, dst, edge_data in frontier_edges:
                 if dst is not dummy_endnode:
-                    subgraph_with_frontier.add_edge(src, dst, **edge_data)
+                    subgraph_with_frontier.add_edge(src, dst, src=src, dst=dst)
             # assert dummy_endnode not in frontier
             # assert dummy_endnode not in subgraph_with_frontier
             return GraphRegion(node, subgraph, frontier, subgraph_with_frontier, False, None)
@@ -671,20 +681,20 @@ class RegionIdentifier:
             if node_ is not dummy_endnode:
                 graph.remove_node(node_)
 
-        graph.add_node(region)
+        graph.add_node(region, node=region)
 
         for src, _, data in in_edges:
             if src not in nodes_set:
-                graph.add_edge(src, region, **data)
+                graph.add_edge(src, region, src=src, dst=region)
 
         for _, dst, data in out_edges:
             if dst not in nodes_set:
-                graph.add_edge(region, dst, **data)
+                graph.add_edge(region, dst, src=region, dst=dst)
 
         if frontier:
             for frontier_node in frontier:
                 if frontier_node is not dummy_endnode:
-                    graph.add_edge(region, frontier_node)
+                    graph.add_edge(region, frontier_node, src=region, dst=frontier_node)
 
         if secondary_graph is not None:
             self._abstract_acyclic_region(secondary_graph, region, {})
@@ -709,16 +719,16 @@ class RegionIdentifier:
         full_graph = networkx.DiGraph()
 
         for node in loop_nodes:
-            subgraph.add_node(node)
+            subgraph.add_node(node, node=node)
             in_edges = list(graph.in_edges(node, data=True))
             out_edges = list(graph.out_edges(node, data=True))
 
             for src, dst, data in in_edges:
-                full_graph.add_edge(src, dst, **data)
+                full_graph.add_edge(src, dst, src=src, dst=dst)
                 if src in loop_nodes:
-                    subgraph.add_edge(src, dst, **data)
-                elif src == region:
-                    subgraph.add_edge(head, dst, **data)
+                    subgraph.add_edge(src, dst, src=src, dst=dst)
+                elif src is region:
+                    subgraph.add_edge(head, dst, src=head, dst=dst)
                 elif src in normal_entries:
                     # graph.add_edge(src, region, **data)
                     delayed_edges.append((src, region, data))
@@ -730,12 +740,12 @@ class RegionIdentifier:
                     assert 0
 
             for src, dst, data in out_edges:
-                full_graph.add_edge(src, dst, **data)
+                full_graph.add_edge(src, dst, src=src, dst=dst)
                 if dst in loop_nodes:
-                    subgraph.add_edge(src, dst, **data)
-                elif dst == region:
-                    subgraph.add_edge(src, head, **data)
-                elif dst == normal_exit_node:
+                    subgraph.add_edge(src, dst, src=src, dst=dst)
+                elif dst is region:
+                    subgraph.add_edge(src, head, src=src, dst=head)
+                elif dst is normal_exit_node:
                     region_outedges.append((node, dst))
                     # graph.add_edge(region, dst, **data)
                     delayed_edges.append((region, dst, data))
@@ -749,7 +759,7 @@ class RegionIdentifier:
 
         subgraph_with_exits = networkx.DiGraph(subgraph)
         for src, dst in region_outedges:
-            subgraph_with_exits.add_edge(src, dst)
+            subgraph_with_exits.add_edge(src, dst, src=src, dst=dst)
         region.graph = subgraph
         region.graph_with_successors = subgraph_with_exits
         if normal_exit_node is not None:
@@ -762,9 +772,9 @@ class RegionIdentifier:
             graph.remove_node(node)
 
         # add delayed edges
-        graph.add_node(region)
+        graph.add_node(region, node=region)
         for src, dst, data in delayed_edges:
-            graph.add_edge(src, dst, **data)
+            graph.add_edge(src, dst, src=src, dst=dst)
 
         region.full_graph = full_graph
 
@@ -802,23 +812,23 @@ class RegionIdentifier:
             new_node = None
 
         else:
-            new_node = node_a.merge_blocks(node_a, node_b)
+            new_node = self._block_cls.merge_blocks(node_a, node_b)
 
         graph.remove_node(node_a)
         graph.remove_node(node_b)
 
         if new_node is not None:
-            graph.add_node(new_node)
+            graph.add_node(new_node, node=new_node)
 
             for src, _, data in in_edges:
                 if src is node_b:
                     src = new_node
-                graph.add_edge(src, new_node, **data)
+                graph.add_edge(src, new_node, src=src, dst=new_node)
 
             for _, dst, data in out_edges:
                 if dst is node_a:
                     dst = new_node
-                graph.add_edge(new_node, dst, **data)
+                graph.add_edge(new_node, dst, src=new_node, dst=dst)
 
         assert not node_a in graph
         assert not node_b in graph
@@ -836,30 +846,30 @@ class RegionIdentifier:
             new_node = None
 
         else:
-            new_node = node_mommy.merge_blocks(node_mommy, node_kiddie)
+            new_node = self._block_cls.merge_blocks(node_mommy, node_kiddie)
 
         graph.remove_node(node_mommy)
         graph.remove_node(node_kiddie)
 
         if new_node is not None:
-            graph.add_node(new_node)
+            graph.add_node(new_node, node=new_node)
 
             for src, _, data in in_edges_mommy:
                 if src == node_kiddie:
                     src = new_node
-                graph.add_edge(src, new_node, **data)
+                graph.add_edge(src, new_node, src=src, dst=new_node)
 
             for _, dst, data in out_edges_mommy:
                 if dst == node_kiddie:
                     continue
                 if dst == node_mommy:
                     dst = new_node
-                graph.add_edge(new_node, dst, **data)
+                graph.add_edge(new_node, dst, src=new_node, dst=dst)
 
             for _, dst, data in out_edges_kiddie:
                 if dst == node_mommy:
                     dst = new_node
-                graph.add_edge(new_node, dst, **data)
+                graph.add_edge(new_node, dst, src=new_node, dst=dst)
 
         assert not node_mommy in graph
         assert not node_kiddie in graph

@@ -2,6 +2,8 @@ from typing import List, Set, Optional
 
 import networkx
 
+from .data import GenericBlock
+
 
 class SCCPlaceholder:
     __slots__ = ["scc_id"]
@@ -218,3 +220,21 @@ def _append_scc(graph: networkx.DiGraph, ordered_nodes: List, scc: Set, loop_hea
         subgraph.remove_edge(src, loop_head)
 
     ordered_nodes.extend(quasi_topological_sort_nodes(subgraph))
+
+
+def cfg_root_node(graph: networkx.DiGraph):
+    nodes = list(graph.nodes)
+    root_node = None
+    if issubclass(nodes[0].__class__, GenericBlock):
+        for node in nodes:
+            if node.is_entrypoint:
+                root_node = node
+                break
+
+    if root_node is None:
+        for node in nodes:
+            if graph.in_degree(node) == 0:
+                root_node = node
+                break
+
+    return root_node
