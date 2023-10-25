@@ -8,7 +8,8 @@ import networkx as nx
 
 from cfgutils.data.generic_block import GenericBlock
 from cfgutils.regions.region_identifier import RegionIdentifier
-from cfgutils.similarity.ged import ged_exact
+from cfgutils.similarity.ged import ged_exact, ged_max
+from cfgutils.similarity.cfged import cfg_edit_distance
 
 
 def numbered_edges_to_block_graph(numbered_edges: List[Tuple[int, int]]) -> networkx.DiGraph:
@@ -144,6 +145,28 @@ class TestGraphEditDistance(unittest.TestCase):
         # TODO: bring in the new algorithm for GED, this is clearly wrong. Score should be 7.
         # assert edit_distance == 7
         assert edit_distance == 5
+
+
+class TestControlFlowGraphEditDistance(unittest.TestCase):
+    def test_exact_cfged(self):
+        # same graphs from `TestGraphEditDistance.test_exact_ged_cfg`, therefore, the CFGED score should be
+        # greater or equal to the exact score of 7 from that testcase
+        g1 = numbered_edges_to_block_graph(
+            [(1, 2), (1, 3), (3, 4), (3, 5), (4, 6), (5, 6), (2, 6)]
+        )
+        g2 = numbered_edges_to_block_graph(
+            [(1, 2), (1, 3), (3, 6.2), (3, 5), (5, 6.2), (2, 6.1)]
+        )
+        max_ged_score = ged_max(g2, g1)
+        exact_ged_score = ged_exact(g2, g1)
+
+        g1_to_g2 = {x: {x} for x in range(7)}
+        g2_to_g1 = g1_to_g2
+        cfged_score = cfg_edit_distance(g2, g1, g2_to_g1, g1_to_g2)
+
+        assert exact_ged_score <= cfged_score <= max_ged_score
+        # in this case, since node matching is non-stochastic, the cfged score is the exact score
+        assert cfged_score == exact_ged_score
 
 
 if __name__ == "__main__":
