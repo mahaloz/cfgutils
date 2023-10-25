@@ -142,3 +142,36 @@ def find_some_leaf_region(region: Union[GenericBlock, GraphRegion], node_blackli
     #        return parent.head, expanded_parent
 
     return None, None
+
+
+def expand_region_head_to_block(region: GraphRegion):
+    region_head = region.head
+    if isinstance(region_head, GenericBlock):
+        return region_head
+
+    if isinstance(region_head, GraphRegion):
+        return expand_region_head_to_block(region_head)
+
+    raise ValueError(f"Invalid region head type {type(region_head)}")
+
+
+def node_is_function_end(node: Union[GenericBlock, GraphRegion]):
+    if node is None:
+        return False
+
+    node = expand_region_head_to_block(node) if isinstance(node, GraphRegion) else node
+    if not node.statements:
+        return False
+
+    return node.is_exitpoint
+
+
+def node_is_function_start(node: Union[GenericBlock, GraphRegion]):
+    if node is None:
+        return False
+
+    node = expand_region_head_to_block(node) if isinstance(node, GraphRegion) else node
+    if not node.statements:
+        return False
+
+    return node.is_entrypoint
