@@ -147,7 +147,7 @@ class TestGraphEditDistance(unittest.TestCase):
         assert edit_distance == 5
 
 
-class TestControlFlowEditDistance(unittest.TestCase):
+class TestControlFlowGraphEditDistance(unittest.TestCase):
     def test_exact_cfged(self):
         # same graphs from `TestGraphEditDistance.test_exact_ged_cfg`, therefore, the CFGED score should be
         # greater or equal to the exact score of 7 from that testcase
