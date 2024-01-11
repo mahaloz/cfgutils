@@ -67,10 +67,8 @@ def graph_edit_distance_core_analysis(
 
     # edge edit cost
     def _edge_ins_cost(*args): return 1
-    def _edge_sub_cost(*args): return 0
     # node edit cost
     def _node_del_cost(*args): return 1
-    def _node_sub_cost(*args): return 0
 
     if is_cfg:
         def _edge_ins_cost(*args):
@@ -100,37 +98,22 @@ def graph_edit_distance_core_analysis(
 
             return 1
 
-        def _node_sub_cost(*args):
-            """
-            Makes it illegal to delete function start nodes or end nodes
-            """
-            node_attrs = args[:2]
-            n1, n2 = node_attrs[0].get('node', None), node_attrs[1].get('node', None)
-            if penalize_root_exit_edits:
-                if ((n2 and n2.is_entrypoint) or (n1 and n1.is_exitpoint)) and n2 is None:
-                    return INVALID_CHOICE_PENALTY
-
-            return 0
-
     if exact_score or upperbound_approx:
         try:
             with timeout(seconds=with_timeout):
                 if upperbound_approx:
                     dist = next(nx.optimize_graph_edit_distance(
                         g1, g2, node_del_cost=_node_del_cost, edge_ins_cost=_edge_ins_cost,
-                        node_subst_cost=_node_sub_cost, edge_subst_cost=_edge_sub_cost,
                     ))
                 else:
                     dist = nx.graph_edit_distance(
                         g1, g2, roots=roots, node_del_cost=_node_del_cost, edge_ins_cost=_edge_ins_cost,
-                        node_subst_cost=_node_sub_cost, edge_subst_cost=_edge_sub_cost,
                     )
         except TimeoutError:
             dist = None
     else:
         dist = nx.graph_edit_distance(
             g1, g2, roots=roots, node_del_cost=_node_del_cost, edge_ins_cost=_edge_ins_cost, timeout=with_timeout,
-            node_subst_cost=_node_sub_cost, edge_subst_cost=_edge_sub_cost,
         )
 
     # sometimes the score can be computed wrong, which we can fix with a recompute ONCE
