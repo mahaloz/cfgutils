@@ -485,26 +485,21 @@ def cfg_edit_distance(
     check_upperbound_approx=False,
 ):
     """
-    src_addr_to_line_map[address] = set(line1, line2, ...)
-    dec_line_to_addr_map[line_num] = set(addr1, addr2, ...)
+        src_addr_to_line_map[address] = set(line1, line2, ...)
+        dec_line_to_addr_map[line_num] = set(addr1, addr2, ...)
 
-    :param src_cfg:
-    :param dec_cfg:
-    :param src_addr_to_line_map:
-    :param dec_line_to_addr_map:
-    :param max_region_collapse:
-    :return:
-    """
+        :param src_cfg:
+        :param dec_cfg:
+        :param src_addr_to_line_map:
+        :param dec_line_to_addr_map:
+        :param max_region_collapse:
+        :return:
+        """
     src_cfg, dec_cfg = nx.DiGraph(src_cfg), nx.DiGraph(dec_cfg)
     cfged_score = 0
     curr_region_collapse = 0
     curr_region_estimates = 0
-
-    # will always be set on the first iteration since redo_structuring is True
-    src_regions, dec_regions = None, None
-    src_nodes, dec_nodes = {}, {}
     redo_structuring = True
-
     unable_to_approx = False
     region_blacklist = set()
 
@@ -512,7 +507,7 @@ def cfg_edit_distance(
     #    l.debug(f"Graph small enough for exact! Running it...")
     #    return graph_edit_distance(dec_cfg, src_cfg, with_timeout=10, max_on_timeout=False)
 
-    # the max possible GED score for any two graphs
+    # the max possible CFGED score for any two graphs
     max_cfged_score = len(src_cfg.nodes) + len(dec_cfg.nodes) + len(src_cfg.edges) + len(dec_cfg.edges)
     upperbound = max_cfged_score
     if check_upperbound_approx:
@@ -569,63 +564,119 @@ def cfg_edit_distance(
             cfged_score += score
             break
 
-        best_match, redo_structuring = find_matching_source_region(
-            dec_r_head, dec_r_cfg, src_regions, src_cfg, src_nodes, dec_line_to_addr_map, src_addr_to_line_map
+        # map the decompilation line to an address (reported by the decompiler
+        addrs = dec_line_to_addr_map.get(dec_r_head.addr, None)
+        if not addrs:
+            # quick check if you can find the line in the addr map in a proximity
+            up_addrs = dec_line_to_addr_map.get(dec_r_head.addr - 1, None)
+            down_addrs = dec_line_to_addr_map.get(dec_r_head.addr + 1, None)
+            if not up_addrs and not down_addrs:
+                l.debug(f"Unable to find any line-addr map for region head {dec_r_head.addr}! Skipping...")
+                region_blacklist.add(dec_r_head.addr)
+                continue
+
+            addrs = up_addrs if up_addrs else down_addrs
+
+        all_lines = set(
+            itertools.chain.from_iterable(
+                [src_addr_to_line_map[addr] for addr in addrs if addr in src_addr_to_line_map]
+            )
         )
-        if redo_structuring:
-            curr_region_collapse += 1
-        if best_match is None:
+        lines_in_src = set(filter(lambda x: x in src_nodes, all_lines))
+
+        # We were unable to find a real region start, probably because a node got consumed
+        if not lines_in_src:
+            lines_in_src = find_containing_block_addrs(src_cfg, all_lines)
+            if not lines_in_src and addrs:
+                # If we still have nothing, walk backwards!
+                for i in range(1, 0x14):
+                    all_lines = set(
+                        itertools.chain.from_iterable(
+                            [src_addr_to_line_map[addr - i] for addr in addrs if addr - i in src_addr_to_line_map]
+                        )
+                    )
+                    lines_in_src = set(filter(lambda x: x in src_nodes, all_lines))
+                    if lines_in_src:
+                        break
+
+        lines_in_src = sorted(lines_in_src)
+        matching_src_regions = list(find_matching_regions_with_lines(src_regions, lines_in_src))
+        if not matching_src_regions:
             region_blacklist.add(dec_r_head.addr)
+            redo_structuring = False
+            curr_region_collapse += 1
+            l.debug(f"Unable to find a pairing region for {dec_r_head.addr}: no src addrs found")
             continue
 
-        l.debug(f"Collapsing (Dec, Src) region pair: {(dec_r_head, best_match.head)}")
-
         #
-        # compute GED of the expanded-matched tail regions
+        # try to find the base matching region
+        #
+
+        # gather sizes
+        matches_by_size = {}
+        lowest_size = 10000
+        for src_region in matching_src_regions:
+            src_block_region = expand_region_to_block_graph(src_region, src_cfg)
+            src_r_head = src_region.head
+            size_diff = abs(len(src_block_region.nodes) - len(dec_r_cfg.nodes))
+            matches_by_size[src_r_head] = (src_region, size_diff)
+            if size_diff < lowest_size:
+                lowest_size = size_diff
+
+        # filter out the ones that are too big
+        matching_src_regions = list(filter(lambda x: x[1][1] <= lowest_size, matches_by_size.items()))
+        if not matching_src_regions:
+            region_blacklist.add(dec_r_head.addr)
+            redo_structuring = False
+            curr_region_collapse += 1
+            l.debug(f"Unable to find a pairing region for {dec_r_head.addr}")
+            continue
+
+        # if we have more than one, tie break with statement size
+        best_match = None
+        if len(matching_src_regions) > 1:
+            smallest_stmt_size = 10000
+            for (head, (region, size)) in matching_src_regions:
+                if not isinstance(head, GenericBlock):
+                    continue
+
+                has_merged_region = head.is_merged_node
+                if len(head.statements) < smallest_stmt_size:
+                    smallest_stmt_size = len(head.statements)
+                    best_match = region
+
+                if has_merged_region:
+                    best_match = region
+                    break
+
+        if best_match is None:
+            best_match = matching_src_regions[0][1][0]
+
+        l.debug(f"Collapsing (Dec, Src) region pair: {(dec_r_head, best_match.head)}")
+        #
+        # compute GED of the expanded region
         #
 
         src_r_cfg = expand_region_to_block_graph(best_match, src_cfg)
-        expanded_src_graph, src_successor = expand_region_to_successor_block_graph(best_match, src_cfg)
-        expanded_dec_graph, dec_successor = expand_region_to_successor_block_graph(dec_region, dec_cfg)
 
-        bad_successor_case = expanded_src_graph is None or expanded_dec_graph is None
-        if not bad_successor_case:
-            dec_size, src_size = len(expanded_dec_graph.nodes), len(expanded_src_graph.nodes)
-        else:
-            dec_size, src_size = len(dec_r_cfg.nodes), len(src_r_cfg.nodes)
-
-        too_large_for_exact = dec_size > MAX_NODES_FOR_EXACT_GED or src_size > MAX_NODES_FOR_EXACT_GED
-        # a heuristic to see if the size difference is too large to approximate, which will cause a skip
-        if too_large_for_exact:
-            size_diff = abs(dec_size - src_size)
-            if size_diff > dec_size * 2 or size_diff > src_size * 2:
-                l.debug(
-                    f"Difference in regions size too large to approximate (Dec, Src): ({dec_size}, {src_size}), skipping for now...")
+        dec_r_size, src_r_size = len(dec_r_cfg.nodes), len(src_r_cfg.nodes)
+        if dec_r_size > MAX_NODES_FOR_EXACT_GED or src_r_size > MAX_NODES_FOR_EXACT_GED:
+            l.debug(
+                f"Encountered a region too large (dec,src): ({len(dec_r_cfg.nodes), len(src_r_cfg.nodes)} nodes) for an exact score, estimating it...")
+            size_diff = abs(dec_r_size - src_r_size)
+            curr_region_collapse += 1
+            if size_diff > dec_r_size * 2 or size_diff > src_r_size * 2:
+                l.debug(f"Difference in regions size too large to approximate, skipping for now...")
                 region_blacklist.add(dec_r_head.addr)
                 redo_structuring = False
                 continue
-            else:
-                curr_region_estimates += 1
 
-        # In most graph expasions of a region, the region should have a single successor and be moderately sized.
-        # In the event this is not true, we can generate highly innacurate GED scores because we rely on GED
-        # approximation of this larger/broken region. To mitigate this, we can special case scenarios which cause
-        # the most problems
-        #
-        # 1. The region is a switch statement, which means its region is huge but actually quite simple
-        switch_region_case = is_switch_region(expanded_src_graph) and is_switch_region(
-            expanded_dec_graph) and too_large_for_exact
-        # 2. The regions has multiple successors (bad_successor_case)
+            # if curr_region_estimates >= max_region_estimates:
+            #    l.warning(f"Exceeded the max region GED approximizaition limit. This function can't be computed.")
+            #    return -1
+            curr_region_estimates += 1
 
-        if switch_region_case:
-            l.debug("Special Case Detected: Switch Region. Using Fast Switch GED...")
-            distance = fast_switch_region_ged(expanded_dec_graph, expanded_src_graph)
-        elif bad_successor_case:
-            l.debug("Special Case Detected: Multi-Successor Region. Using edge-diffs for approx...")
-            distance = graph_edit_distance_core_analysis(dec_r_cfg, src_r_cfg, with_timeout=4)
-        else:
-            distance = graph_edit_distance_core_analysis(expanded_dec_graph, expanded_src_graph, with_timeout=4)
-
+        distance = graph_edit_distance_core_analysis(dec_r_cfg, src_r_cfg, with_timeout=4)
         if distance is None:
             l.debug(f"Unable to compute the GED of the region, skipping...")
             region_blacklist.add(dec_r_head.addr)
@@ -649,14 +700,10 @@ def cfg_edit_distance(
             expand_region_to_block_graph(dec_region, dec_cfg) if not isinstance(dec_region, GenericBlock) else dec_region,
             expand_region_head_to_block(dec_region) if not isinstance(dec_region, GenericBlock) else dec_region
         )
-
-        # extra edge diffs are only needed in the event we can't use a normally expanded region graph
-        if bad_successor_case:
-            edge_diff = find_dst_mismatches(extra_dec_edges, extra_src_edges, dec_line_to_addr_map,
-                                            src_addr_to_line_map)
-            if edge_diff:
-                l.debug(f"In/Out Edge Diff: {edge_diff}")
-                cfged_score += edge_diff
+        edge_diff = find_dst_mismatches(extra_dec_edges, extra_src_edges, dec_line_to_addr_map, src_addr_to_line_map)
+        if edge_diff:
+            l.debug(f"In/Out Edge Diff: {edge_diff}")
+            cfged_score += edge_diff
 
         if len(dec_cfg.nodes) <= 1 or len(src_cfg.nodes) <= 1:
             distance = graph_edit_distance_core_analysis(dec_cfg, src_cfg, with_timeout=10)
@@ -668,9 +715,8 @@ def cfg_edit_distance(
             break
 
         region_blacklist = set()
+        curr_region_collapse += 1
         redo_structuring = True
-
-    l.debug(f"Final CFGED Score: {cfged_score}")
 
     # handle error cases.
     # this only will make sure scores from CFGED are always right, but these cases should all
@@ -683,6 +729,3 @@ def cfg_edit_distance(
         return upperbound
     else:
         return cfged_score
-
-
-
