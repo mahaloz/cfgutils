@@ -102,13 +102,39 @@ def graph_edit_distance_core_analysis(
 
         def _node_sub_cost(*args):
             """
-            Makes it illegal to delete function start nodes or end nodes
+            Makes it illegal to swap the starts and ends of functions
             """
             node_attrs = args[:2]
             n1, n2 = node_attrs[0].get('node', None), node_attrs[1].get('node', None)
             if penalize_root_exit_edits:
-                if ((n2 and n2.is_entrypoint) or (n1 and n1.is_exitpoint)) and n2 is None:
+                if (n1 and (n1.is_entrypoint or n1.is_exitpoint)) or (n2 and (n2.is_entrypoint or n2.is_exitpoint)):
                     return INVALID_CHOICE_PENALTY
+
+            return 0
+
+        def _edge_sub_cost(*args):
+            """
+            Makes it illegal to swap edges that have a start or end node
+            """
+            edge_attrs = args[:2]
+            s1, s2 = edge_attrs[0].get('src', None), edge_attrs[1].get('src', None)
+            d1, d2 = edge_attrs[0].get('dst', None), edge_attrs[1].get('dst', None)
+            corresponding_node = {
+                s1: s2,
+                s2: s1,
+                d1: d2,
+                d2: d1,
+            }
+            nodes = [s1, s2, d1, d2]
+            for node in nodes:
+                if node and (node.is_entrypoint or node.is_exitpoint):
+                    corr_node = corresponding_node[node]
+                    if not corr_node:
+                        return INVALID_CHOICE_PENALTY
+                    elif node.is_entrypoint and not corr_node.is_entrypoint:
+                        return INVALID_CHOICE_PENALTY
+                    elif node.is_exitpoint and not corr_node.is_exitpoint:
+                        return INVALID_CHOICE_PENALTY
 
             return 0
 

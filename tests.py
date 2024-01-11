@@ -65,6 +65,15 @@ def numbered_edges_to_block_graph(numbered_edges: List[Tuple[int, int]]) -> netw
     for node in ends:
         node.is_exitpoint = True
 
+    # update the node attr of every node in nx to be itself
+    for node in graph.nodes:
+        graph.nodes[node]["node"] = node
+
+    # update the edge attr of every edge in nx to be itself
+    for edge in graph.edges:
+        graph.edges[edge]["src"] = edge[0]
+        graph.edges[edge]["dst"] = edge[1]
+
     return graph
 
 
@@ -134,6 +143,11 @@ class TestGraphEditDistance(unittest.TestCase):
         # Edits for G2 -> G1:
         # del(3, 6.2), ins(4), ins(3,4), ins(4, 6.2), del(2, 6.1), del(6.1), ins(2, 6.2)
         #
+        # Note how this is different from the edit distance if you used traditional graph edit distance.
+        # In this case it's higher since we set the special rule that you are not allowed to ever substitute
+        # the start or end nodes of a CFG (unless they are subbed with themselves).
+        #
+
         g1 = numbered_edges_to_block_graph(
             [(1, 2), (1, 3), (3, 4), (3, 5), (4, 6), (5, 6), (2, 6)]
         )
@@ -142,15 +156,36 @@ class TestGraphEditDistance(unittest.TestCase):
         )
         edit_distance = ged_exact(g2, g1, with_timeout=20)
 
-        # TODO: bring in the new algorithm for GED, this is clearly wrong. Score should be 7.
-        # assert edit_distance == 7
-        assert edit_distance == 5
+        assert edit_distance == 7
 
 
 class TestControlFlowGraphEditDistance(unittest.TestCase):
     def test_exact_cfged(self):
+        #
+        # G1:
+        #
+        #       1
+        #     /   \
+        #    2     3
+        #    |    / \
+        #    |    4  5
+        #    |    \  /
+        #    + ---> 6
+        #
+        #
+        # G2:
+        #
+        #       1
+        #     /   \
+        #    2     3
+        #    |     | \
+        #    |     |   5
+        #    |     |  /
+        #   6.1    6.2
+        #
         # same graphs from `TestGraphEditDistance.test_exact_ged_cfg`, therefore, the CFGED score should be
-        # greater or equal to the exact score of 7 from that testcase
+        # greater or equal to the exact score of 7 from that testcase.
+        #
         g1 = numbered_edges_to_block_graph(
             [(1, 2), (1, 3), (3, 4), (3, 5), (4, 6), (5, 6), (2, 6)]
         )
