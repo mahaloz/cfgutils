@@ -71,8 +71,10 @@ def graph_edit_distance_core_analysis(
     # node edit cost
     def _node_del_cost(*args): return 1
     def _node_sub_cost(*args): return 0
+    def _node_ins_cost(*args): return 1
 
-    if is_cfg:
+    # XXX: removed for now, add back later if proved useful
+    if False and is_cfg and penalize_root_exit_edits:
         def _edge_ins_cost(*args):
             """
             Makes it illegal to add edges to pred of function start or succ of function end
@@ -81,11 +83,20 @@ def graph_edit_distance_core_analysis(
             attrs = args[0]
             src = attrs.get('src', None)
             dst = attrs.get('dst', None)
-            if penalize_root_exit_edits:
-                if src and src is not dst and src.is_exitpoint:
-                    return INVALID_CHOICE_PENALTY
-                elif dst and dst is not src and src.is_entrypoint:
-                    return INVALID_CHOICE_PENALTY
+            if src and src is not dst and src.is_exitpoint:
+                return INVALID_CHOICE_PENALTY
+            elif dst and dst is not src and src.is_entrypoint:
+                return INVALID_CHOICE_PENALTY
+
+            return 1
+
+        def _node_ins_cost(*args):
+            """
+            Makes it illegal to add nodes that are the start or end of a function
+            """
+            node = args[0].get('node', None)
+            if node and (node.is_entrypoint or node.is_exitpoint):
+                return INVALID_CHOICE_PENALTY
 
             return 1
 
@@ -94,20 +105,30 @@ def graph_edit_distance_core_analysis(
             Makes it illegal to delete function start nodes or end nodes
             """
             node = args[0].get('node', None)
-            if penalize_root_exit_edits:
-                if node and (node.is_entrypoint or node.is_exitpoint):
-                    return INVALID_CHOICE_PENALTY
+            if node and (node.is_entrypoint or node.is_exitpoint):
+                return INVALID_CHOICE_PENALTY
 
             return 1
 
         def _node_sub_cost(*args):
             """
-            Makes it illegal to swap the starts and ends of functions
+            Makes it illegal to swap nodes that are either a start or end of a function with
+            a node that is not a start or end of a function
             """
             node_attrs = args[:2]
             n1, n2 = node_attrs[0].get('node', None), node_attrs[1].get('node', None)
-            if penalize_root_exit_edits:
-                if (n1 and (n1.is_entrypoint or n1.is_exitpoint)) or (n2 and (n2.is_entrypoint or n2.is_exitpoint)):
+            node_map = {
+                n1: n2,
+                n2: n1,
+            }
+
+            for node, corr_node in node_map.items():
+                if not corr_node or not node:
+                    _l.warning("Encountered a node that has no attribute, please fix me!")
+                    continue
+                if node.is_entrypoint and not corr_node.is_entrypoint:
+                    return INVALID_CHOICE_PENALTY
+                elif node.is_exitpoint and not corr_node.is_exitpoint:
                     return INVALID_CHOICE_PENALTY
 
             return 0
@@ -119,22 +140,20 @@ def graph_edit_distance_core_analysis(
             edge_attrs = args[:2]
             s1, s2 = edge_attrs[0].get('src', None), edge_attrs[1].get('src', None)
             d1, d2 = edge_attrs[0].get('dst', None), edge_attrs[1].get('dst', None)
-            corresponding_node = {
+            node_map = {
                 s1: s2,
                 s2: s1,
                 d1: d2,
                 d2: d1,
             }
-            nodes = [s1, s2, d1, d2]
-            for node in nodes:
-                if node and (node.is_entrypoint or node.is_exitpoint):
-                    corr_node = corresponding_node[node]
-                    if not corr_node:
-                        return INVALID_CHOICE_PENALTY
-                    elif node.is_entrypoint and not corr_node.is_entrypoint:
-                        return INVALID_CHOICE_PENALTY
-                    elif node.is_exitpoint and not corr_node.is_exitpoint:
-                        return INVALID_CHOICE_PENALTY
+            for node, corr_node in node_map.items():
+                if not corr_node or not node:
+                    _l.warning("Encountered a node that has no attribute, please fix me!")
+                    continue
+                elif node.is_entrypoint and not corr_node.is_entrypoint:
+                    return INVALID_CHOICE_PENALTY
+                elif node.is_exitpoint and not corr_node.is_exitpoint:
+                    return INVALID_CHOICE_PENALTY
 
             return 0
 
@@ -143,20 +162,17 @@ def graph_edit_distance_core_analysis(
             with timeout(seconds=with_timeout):
                 if upperbound_approx:
                     dist = next(nx.optimize_graph_edit_distance(
-                        g1, g2, node_del_cost=_node_del_cost, edge_ins_cost=_edge_ins_cost,
-                        node_subst_cost=_node_sub_cost, edge_subst_cost=_edge_sub_cost,
+                        g1, g2,
                     ))
                 else:
                     dist = nx.graph_edit_distance(
-                        g1, g2, roots=roots, node_del_cost=_node_del_cost, edge_ins_cost=_edge_ins_cost,
-                        node_subst_cost=_node_sub_cost, edge_subst_cost=_edge_sub_cost,
+                        g1, g2, roots=roots,
                     )
         except TimeoutError:
             dist = None
     else:
         dist = nx.graph_edit_distance(
-            g1, g2, roots=roots, node_del_cost=_node_del_cost, edge_ins_cost=_edge_ins_cost, timeout=with_timeout,
-            node_subst_cost=_node_sub_cost, edge_subst_cost=_edge_sub_cost,
+            g1, g2, roots=roots, timeout=with_timeout,
         )
 
     # sometimes the score can be computed wrong, which we can fix with a recompute ONCE

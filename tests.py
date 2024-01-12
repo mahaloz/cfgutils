@@ -39,19 +39,18 @@ def numbered_edges_to_block_graph(numbered_edges: List[Tuple[int, int]]) -> netw
     ]
     # do all float edges (extra data)
     if float_edges:
+        float_blocks = {}
+        for edge in float_edges:
+            for node in edge:
+                if type(node) is float:
+                    float_str = str(node)
+                    if float_str not in float_blocks:
+                        idx = int(float_str.split(".")[-1])
+                        float_blocks[float_str] = GenericBlock(int(node), idx=idx)
+
         for src, dst in float_edges:
-            if type(src) is float:
-                src_idx = int(str(src).split(".")[-1])
-                src_blk = GenericBlock(int(src), idx=src_idx)
-            else:
-                src_blk = blocks[src]
-
-            if type(dst) is float:
-                dst_idx = int(str(dst).split(".")[-1])
-                dst_blk = GenericBlock(int(dst), idx=dst_idx)
-            else:
-                dst_blk = blocks[dst]
-
+            src_blk = float_blocks[str(src)] if type(src) is float else blocks[src]
+            dst_blk = float_blocks[str(dst)] if type(dst) is float else blocks[dst]
             block_edges.append((src_blk, dst_blk))
 
     graph = nx.DiGraph()

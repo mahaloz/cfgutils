@@ -16,16 +16,18 @@ class GenericBlock:
         self._idx_str = "" if self.idx is None else f".{self.idx}"
 
     def __eq__(self, other):
-        return type(other) == self.__class__ and self.addr == other.addr and self.statements == other.statements
+        return type(other) is self.__class__ and self.addr == other.addr and self.statements == other.statements
 
     def __hash__(self):
         return hash(f"{self.addr}{self.idx}{[d for d in self.statements]}")
 
     def __repr__(self):
-        return f"<Block: {self.addr}{self._idx_str}>"
+        type_str = " (exit)" if self.is_exitpoint else " (entry)" if self.is_entrypoint else ""
+        return f"<Block: {self.addr}{self._idx_str}{type_str}>"
 
     def __str__(self):
-        output = f"{self.addr}{self._idx_str}:\n"
+        type_str = " (exit)" if self.is_exitpoint else " (entry)" if self.is_entrypoint else ""
+        output = f"{self.addr}{self._idx_str}{type_str}:\n"
         output += str(self.statements)
         return output
 
