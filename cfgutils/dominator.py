@@ -467,6 +467,8 @@ class Dominators:
             stack = [start_node]
             while len(stack) > 0:
                 node = stack.pop()
+                if node in scanned_nodes:
+                    continue
                 counter += 1
 
                 # Mark it as scanned
@@ -485,7 +487,6 @@ class Dominators:
                     if s not in scanned_nodes:
                         stack.append(s)
                         parent[s] = node
-                        scanned_nodes.add(s)
 
             if counter >= all_nodes_count:
                 break
