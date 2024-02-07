@@ -146,7 +146,7 @@ class TestControlFlowGraphEditDistance(unittest.TestCase):
 
 
 class TestHuCFGED(unittest.TestCase):
-    def test_cross_jmp(self):
+    def test_cross_jump_graphs(self):
         g1, g2 = CROSS_JUMP_OPT_GRAPHS
         score = hu_cfged(g1, g2)
         real_score = ged_exact(g1, g2)
