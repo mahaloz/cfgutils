@@ -9,8 +9,9 @@ from cfgutils.data.generic_block import GenericBlock
 from cfgutils.regions.region_identifier import RegionIdentifier
 from cfgutils.similarity.ged.abu_aisheh_ged import ged_exact, ged_max, ged_explained
 from cfgutils.similarity.ged.basque_cfged import cfg_edit_distance
-
+from cfgutils.similarity.ged.hu_cfged import hu_cfged
 from cfgutils.matrix.munkres import Munkres, print_matrix
+
 
 class TestRegionIdentification(unittest.TestCase):
     def test_region_identification(self):
@@ -142,6 +143,17 @@ class TestControlFlowGraphEditDistance(unittest.TestCase):
 
             if i == 0:
                 assert exact_ged_score == cfged_score
+
+
+class TestHuCFGED(unittest.TestCase):
+    def test_cross_jmp(self):
+        g1, g2 = CROSS_JUMP_OPT_GRAPHS
+        score = hu_cfged(g1, g2)
+        real_score = ged_exact(g1, g2)
+        max_score = ged_max(g1, g2)
+        print(f"score={score}, real_score={real_score}, max_score={max_score}")
+        assert real_score <= score <= max_score
+
 
 class TestMatrixMath(unittest.TestCase):
     def test_munkres(self):

@@ -6,34 +6,11 @@ import logging
 
 import networkx as nx
 
-from cfgutils.sorting import cfg_root_node
 from cfgutils.os_utils import timeout
+from cfgutils.similarity.ged import INVALID_CHOICE_PENALTY, collect_graph_roots
 
 _l = logging.getLogger(__name__)
 MAX_NODES_FOR_EXACT_GED = 12
-INVALID_CHOICE_PENALTY = 100000
-
-#
-# Helpers
-#
-
-
-def _collect_graph_roots(g1, g2):
-    # first, depend on the function start node
-    g1_start, g2_start = cfg_root_node(g1), cfg_root_node(g2)
-    if g1_start is not None and g2_start is not None:
-        roots = (g1_start, g2_start,)
-    else:
-        roots = None
-
-    # second attempt, use predecessors
-    if roots is None:
-        g1_starts = list(node for node in g1.nodes if len(list(g1.predecessors(node))) == 0)
-        g2_starts = list(node for node in g2.nodes if len(list(g2.predecessors(node))) == 0)
-        if len(g1_starts) == 1 == len(g2_starts):
-            roots = (g1_starts[0], g2_starts[0],)
-
-    return roots
 
 
 #
@@ -190,7 +167,7 @@ def graph_edit_distance_core_analysis(
     g1: nx.DiGraph, g2: nx.DiGraph, is_cfg=True, upperbound_approx=False, exact_score=False, with_timeout=10,
     penalize_root_exit_edits=True, recover_on_invalid_edits=True
 ):
-    roots = _collect_graph_roots(g1, g2) if is_cfg else None
+    roots = collect_graph_roots(g1, g2) if is_cfg else None
 
     _node_sub_cost = None
     _edge_sub_cost = None
