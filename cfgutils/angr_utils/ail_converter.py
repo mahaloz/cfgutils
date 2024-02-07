@@ -11,7 +11,7 @@ from cfgutils.data.generic_block import GenericBlock
 _l = logging.getLogger(__name__)
 
 
-def _binary_to_ail_cfgs(binary_path: Path, functions=None):
+def _binary_to_ail_cfgs(binary_path: Path, functions=None, make_generic=False):
     binary_path = Path(binary_path).absolute()
     if not binary_path.exists():
         raise FileNotFoundError(f"{binary_path} does not exist")
@@ -43,7 +43,7 @@ def _binary_to_ail_cfgs(binary_path: Path, functions=None):
             func.name = func.name[:func.name.index(".")]
 
     # generate a cfg for each function
-    ail_cfgs = []
+    ail_cfgs = {}
     for func_idx, func_addr in enumerate(functions):
         try:
             f = cfg.functions[func_addr]
@@ -55,9 +55,15 @@ def _binary_to_ail_cfgs(binary_path: Path, functions=None):
             continue
 
         dec = proj.analyses.Decompiler(f, cfg=cfg, kb=cfg.kb)
-        ail_cfgs.append(dec.clinic.cc_graph)
+        dec.clinic.cc_graph.name = str(f.name)
+        ail_cfgs[str(f.name)] = dec.clinic.cc_graph
 
-    return ail_cfgs
+    if make_generic:
+        cfgs = [ail_cfg_to_generic(cfg, proj) for name, cfg in ail_cfgs.items()]
+    else:
+        cfgs = ail_cfgs
+
+    return {cfg.name or str(i): cfg for i, cfg in enumerate(cfgs)}
 
 
 def ail_cfg_to_generic(cfg: nx.DiGraph, project=None):
@@ -83,9 +89,7 @@ def ail_cfg_to_generic(cfg: nx.DiGraph, project=None):
 
 
 def binary_to_cfgs(binary_path: Path, functions=None):
-    ail_cfgs = _binary_to_ail_cfgs(binary_path, functions)
-    cfgs = [ail_cfg_to_generic(cfg) for cfg in ail_cfgs]
-    return cfgs
+    return _binary_to_ail_cfgs(binary_path, functions, make_generic=True)
 
 
 def ail_pickle_to_cfg(pickle_path: Path):
