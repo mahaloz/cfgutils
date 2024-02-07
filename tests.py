@@ -7,9 +7,10 @@ import networkx as nx
 
 from cfgutils.data.generic_block import GenericBlock
 from cfgutils.regions.region_identifier import RegionIdentifier
-from cfgutils.similarity.ged import ged_exact, ged_max, ged_explained
-from cfgutils.similarity.cfged import cfg_edit_distance
+from cfgutils.similarity.ged.abu_aisheh_ged import ged_exact, ged_max, ged_explained
+from cfgutils.similarity.ged.basque_cfged import cfg_edit_distance
 
+from cfgutils.matrix.munkres import Munkres, print_matrix
 
 class TestRegionIdentification(unittest.TestCase):
     def test_region_identification(self):
@@ -141,6 +142,50 @@ class TestControlFlowGraphEditDistance(unittest.TestCase):
 
             if i == 0:
                 assert exact_ged_score == cfged_score
+
+class TestMatrixMath(unittest.TestCase):
+    def test_munkres(self):
+        matrices = [
+            # Square
+            ([[400, 150, 400],
+              [400, 450, 600],
+              [300, 225, 300]],
+             850  # expected cost
+             ),
+
+            # Rectangular variant
+            ([[400, 150, 400, 1],
+              [400, 450, 600, 2],
+              [300, 225, 300, 3]],
+             452  # expected cost
+             ),
+
+            # Square
+            ([[10, 10, 8],
+              [9, 8, 1],
+              [9, 7, 4]],
+             18
+             ),
+
+            # Rectangular variant
+            ([[10, 10, 8, 11],
+              [9, 8, 1, 1],
+              [9, 7, 4, 10]],
+             15
+             ),
+        ]
+
+        m = Munkres()
+        for cost_matrix, expected_total in matrices:
+            print_matrix(cost_matrix, msg='cost matrix')
+            indexes = m.compute(cost_matrix)
+            total_cost = 0
+            for r, c in indexes:
+                x = cost_matrix[r][c]
+                total_cost += x
+                print('(%d, %d) -> %d' % (r, c, x))
+            print('lowest cost=%d' % total_cost)
+            assert expected_total == total_cost
 
 
 #

@@ -1,9 +1,13 @@
+# Based on the default GED algorithm found in Networkx which is based on the following paper:
+# "An Exact Graph Edit Distance Algorithm for Solving Pattern Recognition Problems" by Abu-Aisheh et al.
+#
+
 import logging
 
 import networkx as nx
 
-from ..sorting import cfg_root_node
-from ..os_utils import timeout
+from cfgutils.sorting import cfg_root_node
+from cfgutils.os_utils import timeout
 
 _l = logging.getLogger(__name__)
 MAX_NODES_FOR_EXACT_GED = 12

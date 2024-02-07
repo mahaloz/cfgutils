@@ -1,18 +1,30 @@
+# This is the CFGED (Control Flow GED) algorithm used in the paper:
+# "Ahoy SAILR! There is No Need to DREAM of C: A Compiler-Aware Structuring Algorithm for Binary Decompilation"
+# by Basque et al.
+#
+# The CFGED algorithm is intended to ONLY be used with Control Flow Graphs, that also have the following
+# properties:
+# 1. The graph is rooted, meaning it has a single start node and a single end node.
+# 2. A mapping is provided that maps some nodes in g1 to some nodes in g2. This is used to guide the algorithm
+#    to the correct regions to compute the GED on.
+#
+# This algorithm relies on the Abu-Aisheh GED algorithm, but it is modified to work with CFGs.
+
 import itertools
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, Union, List, Set, Optional, Tuple
+from typing import Dict, Union, Set, Optional, Tuple
 import logging
 
 import networkx as nx
 
-from .ged import ged_upperbound, graph_edit_distance_core_analysis, MAX_NODES_FOR_EXACT_GED
-from ..regions import GraphRegion, RegionIdentifier
-from ..regions.utils import (
+from cfgutils.similarity.ged.abu_aisheh_ged import ged_upperbound, graph_edit_distance_core_analysis, MAX_NODES_FOR_EXACT_GED
+from cfgutils.regions import GraphRegion, RegionIdentifier
+from cfgutils.regions.utils import (
     expand_region_to_block_graph, expand_region_head_to_block, node_is_function_start, node_is_function_end
 )
-from ..data import GenericBlock
-from ..file_formats import save_cfg_as_png
+from cfgutils.data import GenericBlock
+from cfgutils.file_formats import save_cfg_as_png
 
 
 l = logging.getLogger(__name__)
