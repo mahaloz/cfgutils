@@ -5,6 +5,7 @@ import graphviz
 
 
 def save_cfg_as_png(cfg: nx.DiGraph, output_path: Path):
+    output_path = Path(output_path)
     tmp_path = output_path.with_suffix(".dot")
     nx.drawing.nx_agraph.write_dot(cfg, str(tmp_path))
     dot_src = graphviz.Source(open(tmp_path).read(), format="png")
