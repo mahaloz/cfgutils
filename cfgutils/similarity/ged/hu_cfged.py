@@ -1,3 +1,13 @@
+# This reimplementation was based on the code found in http://cfgsim.cs.arizona.edu/. The code found there is an
+# implementation based on the following paper:
+# "Large-Scale Malware Indexing Using Function-Call Graphs"
+# by Hu et al. and published at CCS 2009.
+#
+# This reimplementation differs in how it handles the cost of relabeling nodes. The original paper
+# uses instruction information to decide a score. We dont implement that here, and instead we add the extra
+# constraint of illegal edits to the graph (swapping a start or exit with a non-start or non-exit).
+#
+
 import math
 import sys
 
