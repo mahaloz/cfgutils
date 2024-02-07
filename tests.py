@@ -1,14 +1,12 @@
 import sys
-
 import unittest
-from typing import List, Tuple
 
-import networkx as nx
-
-from cfgutils.data.generic_block import GenericBlock
 from cfgutils.regions.region_identifier import RegionIdentifier
-from cfgutils.similarity.ged import ged_exact, ged_max, ged_explained
-from cfgutils.similarity.cfged import cfg_edit_distance
+from cfgutils.data import numbered_edges_to_block_graph
+from cfgutils.similarity.ged.abu_aisheh_ged import ged_exact, ged_max, ged_explained
+from cfgutils.similarity.ged.basque_cfged import cfg_edit_distance
+from cfgutils.similarity.ged.hu_cfged import hu_cfged
+from cfgutils.matrix.munkres import Munkres, print_matrix
 
 
 class TestRegionIdentification(unittest.TestCase):
@@ -143,72 +141,60 @@ class TestControlFlowGraphEditDistance(unittest.TestCase):
                 assert exact_ged_score == cfged_score
 
 
-#
-# Utils
-#
+class TestHuCFGED(unittest.TestCase):
+    def test_cross_jump_graphs(self):
+        g1, g2 = CROSS_JUMP_OPT_GRAPHS
+        score = hu_cfged(g1, g2)
+        real_score = ged_exact(g1, g2)
+        max_score = ged_max(g1, g2)
+        print(f"score={score}, real_score={real_score}, max_score={max_score}")
+        assert real_score <= score <= max_score
 
-def numbered_edges_to_block_graph(numbered_edges: List[Tuple[int, int]]) -> nx.DiGraph:
-    """
-    Node numbering should start at 1. If a number is in the form of a float, like 1.1, then the number on
-    the right of the decimal will be treated as the idx, which is a unique identifier. Please use small
-    numbers for the block addresses.
-    """
 
-    # find max block number to create a block dictionary
-    block_numbers = set()
-    float_edges = []
-    for src, dst in numbered_edges:
-        block_numbers.add(src)
-        block_numbers.add(dst)
-        if type(src) is float or type(dst) is float:
-            float_edges.append((src, dst))
+class TestMatrixMath(unittest.TestCase):
+    def test_munkres(self):
+        matrices = [
+            # Square
+            ([[400, 150, 400],
+              [400, 450, 600],
+              [300, 225, 300]],
+             850  # expected cost
+             ),
 
-    max_number = int(max(block_numbers))
-    # None blocks added to make indexing for the right block addr easier
-    blocks = [None] + [GenericBlock(i) for i in range(1, max_number+1)] + [None]
+            # Rectangular variant
+            ([[400, 150, 400, 1],
+              [400, 450, 600, 2],
+              [300, 225, 300, 3]],
+             452  # expected cost
+             ),
 
-    # do all normal edges
-    block_edges = [
-        (blocks[in_e], blocks[out_e]) for (in_e, out_e) in numbered_edges
-        if not type(in_e) is float and not type(out_e) is float
-    ]
-    # do all float edges (extra data)
-    if float_edges:
-        float_blocks = {}
-        for edge in float_edges:
-            for node in edge:
-                if type(node) is float:
-                    float_str = str(node)
-                    if float_str not in float_blocks:
-                        idx = int(float_str.split(".")[-1])
-                        float_blocks[float_str] = GenericBlock(int(node), idx=idx)
+            # Square
+            ([[10, 10, 8],
+              [9, 8, 1],
+              [9, 7, 4]],
+             18
+             ),
 
-        for src, dst in float_edges:
-            src_blk = float_blocks[str(src)] if type(src) is float else blocks[src]
-            dst_blk = float_blocks[str(dst)] if type(dst) is float else blocks[dst]
-            block_edges.append((src_blk, dst_blk))
+            # Rectangular variant
+            ([[10, 10, 8, 11],
+              [9, 8, 1, 1],
+              [9, 7, 4, 10]],
+             15
+             ),
+        ]
 
-    graph = nx.DiGraph()
-    graph.add_edges_from(block_edges)
+        m = Munkres()
+        for cost_matrix, expected_total in matrices:
+            print_matrix(cost_matrix, msg='cost matrix')
+            indexes = m.compute(cost_matrix)
+            total_cost = 0
+            for r, c in indexes:
+                x = cost_matrix[r][c]
+                total_cost += x
+                print('(%d, %d) -> %d' % (r, c, x))
+            print('lowest cost=%d' % total_cost)
+            assert expected_total == total_cost
 
-    # find start and ends and update their attributes
-    starts = [n for n in graph.nodes if graph.in_degree(n) == 0]
-    ends = [n for n in graph.nodes if graph.out_degree(n) == 0]
-    for node in starts:
-        node.is_entrypoint = True
-    for node in ends:
-        node.is_exitpoint = True
-
-    # update the node attr of every node in nx to be itself
-    for node in graph.nodes:
-        graph.nodes[node]["node"] = node
-
-    # update the edge attr of every edge in nx to be itself
-    for edge in graph.edges:
-        graph.edges[edge]["src"] = edge[0]
-        graph.edges[edge]["dst"] = edge[1]
-
-    return graph
 
 #
 # Some common graphs used among testcases
