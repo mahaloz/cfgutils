@@ -1,9 +1,12 @@
 import pickle
 from pathlib import Path
 import logging
+from typing import Union, Dict, Tuple
 
 import networkx as nx
 import angr
+from angr.analyses.decompiler.optimization_passes import DUPLICATING_OPTS, CONDENSING_OPTS
+from angr.analyses.decompiler.utils import to_ail_supergraph
 
 from .prettyify_ail import stmt_to_pretty_text
 from cfgutils.data.generic_block import GenericBlock
@@ -11,7 +14,23 @@ from cfgutils.data.generic_block import GenericBlock
 _l = logging.getLogger(__name__)
 
 
-def binary_to_ail_cfgs(binary_path: Path, functions=None, make_generic=False):
+def binary_to_ail_cfgs(
+    binary_path: Path, functions=None, make_generic=False, structuring_opts=True, supergraph=True,
+    return_project=False,
+) -> Union[Dict[str, nx.DiGraph], Tuple[Dict[str, nx.DiGraph], angr.Project]]:
+    """
+    A simple wrapper around the angr decompiler to simply use the defaults and return the AIL CFGs which
+    are present at the end of the decompilation process. Using make_generic, you can convert the AIL CFGs
+    into GenericBlock CFGs for use with CFGUtils functions. You can also disable some of the structuring
+    optimizations if you want to see the raw CFGs.
+
+    :param binary_path: Path to the binary to decompile
+    :param functions: List of function addresses to decompile. If None, all functions will be decompiled
+    :param make_generic: Convert the AIL CFGs to GenericBlock CFGs
+    :param structuring_opts: Enable or disable structuring optimizations
+    :param supergraph: Convert the AIL CFGs to supergraphs
+    :param return_project: Return the angr Project object as well
+    """
     binary_path = Path(binary_path).absolute()
     if not binary_path.exists():
         raise FileNotFoundError(f"{binary_path} does not exist")
@@ -42,6 +61,13 @@ def binary_to_ail_cfgs(binary_path: Path, functions=None, make_generic=False):
         if "." in func.name:
             func.name = func.name[:func.name.index(".")]
 
+    # some optimizations can drastically change the structure of the CFG, so we should disable some if wanted
+    all_optimizations = angr.analyses.decompiler.optimization_passes.get_default_optimization_passes(
+        proj.arch, "linux"
+    )
+    if not structuring_opts:
+        all_optimizations = [opt for opt in all_optimizations if opt not in DUPLICATING_OPTS + CONDENSING_OPTS]
+
     # generate a cfg for each function
     ail_cfgs = {}
     for func_idx, func_addr in enumerate(functions):
@@ -54,16 +80,22 @@ def binary_to_ail_cfgs(binary_path: Path, functions=None, make_generic=False):
         if f is None or f.is_plt:
             continue
 
-        dec = proj.analyses.Decompiler(f, cfg=cfg, kb=cfg.kb)
+        # for this function you don't actually need the linear decompilation, but we run through the entire
+        # decompilation process to assure every optimization is run that would be done on a normal Clinic graph
+        dec = proj.analyses.Decompiler(f, cfg=cfg, kb=cfg.kb, optimization_passes=all_optimizations)
         dec.clinic.cc_graph.name = str(f.name)
-        ail_cfgs[str(f.name)] = dec.clinic.cc_graph
+        ail_cfgs[str(f.name)] = dec.clinic.cc_graph if not supergraph else to_ail_supergraph(dec.clinic.cc_graph)
 
     if make_generic:
         cfgs = [ail_cfg_to_generic(cfg, proj) for name, cfg in ail_cfgs.items()]
     else:
-        cfgs = ail_cfgs
+        cfgs = list(ail_cfgs.values())
 
-    return {cfg.name or str(i): cfg for i, cfg in enumerate(cfgs)}
+    named_cfgs = {cfg.name or str(i): cfg for i, cfg in enumerate(cfgs)}
+    if return_project:
+        return named_cfgs, proj
+    else:
+        return named_cfgs
 
 
 def ail_cfg_to_generic(cfg: nx.DiGraph, project=None):
