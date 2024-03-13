@@ -11,7 +11,7 @@ from cfgutils.data.generic_block import GenericBlock
 _l = logging.getLogger(__name__)
 
 
-def _binary_to_ail_cfgs(binary_path: Path, functions=None, make_generic=False):
+def binary_to_ail_cfgs(binary_path: Path, functions=None, make_generic=False):
     binary_path = Path(binary_path).absolute()
     if not binary_path.exists():
         raise FileNotFoundError(f"{binary_path} does not exist")
@@ -88,8 +88,8 @@ def ail_cfg_to_generic(cfg: nx.DiGraph, project=None):
     return new_cfg
 
 
-def binary_to_cfgs(binary_path: Path, functions=None):
-    return _binary_to_ail_cfgs(binary_path, functions, make_generic=True)
+def binary_to_generic_cfgs(binary_path: Path, functions=None):
+    return binary_to_ail_cfgs(binary_path, functions, make_generic=True)
 
 
 def ail_pickle_to_cfg(pickle_path: Path):

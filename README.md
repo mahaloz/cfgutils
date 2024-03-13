@@ -15,7 +15,7 @@ pip3 install cfgutils
 CFGUtils is used on Networkx DiGraphs. Most analysis assumes the graph is composed of [GenericBlock](cfgutils/data/generic_block.py) nodes. 
 The nodes a very simple and can be subclassed to represent different kinds of blocks.
 
-All algorithms in this library have a testcase, which can be found in the [tests.py](tests.py) file.
+All algorithms in this library have a testcase, which can be found in the [tests.py](tests/test_ged.py) file.
 
 ### Region Identification
 Regions here are defined as [Single-Entry Single-Exit (SESE)](https://iss.oden.utexas.edu/Publications/Papers/PLDI1994.pdf) subgraphs of the CFG.

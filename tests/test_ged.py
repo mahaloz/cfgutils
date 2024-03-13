@@ -1,47 +1,10 @@
 import sys
 import unittest
 
-from cfgutils.regions.region_identifier import RegionIdentifier
 from cfgutils.data import numbered_edges_to_block_graph
 from cfgutils.similarity.ged.abu_aisheh_ged import ged_exact, ged_max, ged_explained
 from cfgutils.similarity.ged.basque_cfged import cfg_edit_distance
 from cfgutils.similarity.ged.hu_cfged import hu_cfged
-from cfgutils.matrix.munkres import Munkres, print_matrix
-
-
-class TestRegionIdentification(unittest.TestCase):
-    def test_region_identification(self):
-        #
-        # Graph:
-        #         1
-        #        / \
-        #       2   3
-        #       \   /
-        #         4
-        #        / \
-        #       5   6
-        #        \ /
-        #         7
-        #
-        # Regions:
-        # [1,2,3]
-        # [4,5,6]
-        # [1,7]
-        # None blocks added to start and end to make indexing easier
-        graph = numbered_edges_to_block_graph(
-            [(1, 2), (1, 3), (2, 4), (3, 4), (4, 5), (4, 6), (5, 7), (6, 7)]
-        )
-        ri = RegionIdentifier(graph)
-        top_region = ri.region
-
-        # the node to start all the regions should be 1
-        assert top_region.head.head.head.addr == 1
-
-        # check known regions
-        region_blk_sets = [set(blks) for blks in ri.regions_by_block_addrs]
-        assert {1, 2, 3} in region_blk_sets
-        assert {4, 5, 6} in region_blk_sets
-        assert {1, 7} in region_blk_sets
 
 
 class TestGraphEditDistance(unittest.TestCase):
@@ -108,7 +71,7 @@ class TestGraphEditDistance(unittest.TestCase):
         assert two_to_one_edit_distance == 7
 
 
-class TestControlFlowGraphEditDistance(unittest.TestCase):
+class TestBasqueCFGED(unittest.TestCase):
     def test_exact_cfged(self):
         """
         The CFGED algorithm is a special version of GED that is designed to work with CFGs, quickly. To do this,
@@ -149,53 +112,6 @@ class TestHuCFGED(unittest.TestCase):
         max_score = ged_max(g1, g2)
         print(f"score={score}, real_score={real_score}, max_score={max_score}")
         assert real_score <= score <= max_score
-
-
-class TestMatrixMath(unittest.TestCase):
-    def test_munkres(self):
-        matrices = [
-            # Square
-            ([[400, 150, 400],
-              [400, 450, 600],
-              [300, 225, 300]],
-             850  # expected cost
-             ),
-
-            # Rectangular variant
-            ([[400, 150, 400, 1],
-              [400, 450, 600, 2],
-              [300, 225, 300, 3]],
-             452  # expected cost
-             ),
-
-            # Square
-            ([[10, 10, 8],
-              [9, 8, 1],
-              [9, 7, 4]],
-             18
-             ),
-
-            # Rectangular variant
-            ([[10, 10, 8, 11],
-              [9, 8, 1, 1],
-              [9, 7, 4, 10]],
-             15
-             ),
-        ]
-
-        m = Munkres()
-        for cost_matrix, expected_total in matrices:
-            print_matrix(cost_matrix, msg='cost matrix')
-            indexes = m.compute(cost_matrix)
-            total_cost = 0
-            for r, c in indexes:
-                x = cost_matrix[r][c]
-                total_cost += x
-                print('(%d, %d) -> %d' % (r, c, x))
-            print('lowest cost=%d' % total_cost)
-            assert expected_total == total_cost
-
-
 #
 # Some common graphs used among testcases
 #
