@@ -18,7 +18,7 @@ class TestAngrCFGTools(unittest.TestCase):
             self.skipTest("angr is not available")
 
     def test_block_matcher(self):
-        from cfgutils.angr_utils.ail_converter import binary_to_ail_cfgs
+        from cfgutils.angr_utils.ail_graph_conv import binary_to_ail_cfgs
         from cfgutils.angr_utils.block_matcher import AILBlockMatcher
         from angr.analyses.decompiler.utils import find_block_by_addr
 

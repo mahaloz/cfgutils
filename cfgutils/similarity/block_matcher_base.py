@@ -82,7 +82,8 @@ class BlockMatcherBase:
             numerator += (len(set.union(set(f1), set(f2))) - len(set.intersection(set(f1), set(f2)))) * weight
             denominator += len(set.union(set(f1), set(f2))) * weight
 
-        return numerator / denominator
+        # denominator == 0 when two empty blocks compared, they are equal
+        return (numerator / denominator) if denominator else 0
 
     #
     # Must be implemented by the user
