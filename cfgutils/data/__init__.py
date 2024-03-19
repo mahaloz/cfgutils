@@ -3,6 +3,7 @@ from typing import List, Tuple
 import networkx as nx
 
 from .generic_block import GenericBlock
+from .generic_statement import GenericStatement
 
 
 def numbered_edges_to_block_graph(numbered_edges: List[Tuple[int, int]]) -> nx.DiGraph:

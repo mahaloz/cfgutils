@@ -3,6 +3,7 @@ from pathlib import Path
 import logging
 from typing import Union, Dict, Tuple
 
+import ailment
 import networkx as nx
 import angr
 from angr.analyses.decompiler.optimization_passes import DUPLICATING_OPTS, CONDENSING_OPTS

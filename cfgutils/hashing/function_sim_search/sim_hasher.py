@@ -1,37 +1,160 @@
+import hashlib
 from collections import defaultdict
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Tuple
 
 import networkx as nx
 
-from .feat_weights import FeatureWeights
 from ...sorting import quasi_topological_sort_nodes
-
-mask64bit = 0xffffffffffffffff
-
-
-def rotl64(data, n):
-    _data = data & mask64bit
-    return ((_data & mask64bit) << n) & mask64bit
-
-
-# Some primes between 2^63 and 2^64 from CityHash.
-seed0_ = 0xc3a5c85c97cb3127
-seed1_ = 0xb492b66fbe98f273
-seed2_ = 0x9ae16a3b2f90404f
+from ...data import GenericBlock, GenericStatement
+from .flowgraph import FlowGraph
+from . import rotl64, mask64bit, seed0_, seed1_, seed2_, k0, k1, k2, mask32bit
 
 
 class FunctionSimHasher:
+    TYP_GRAPH = "graph"
+    TYPE_MNEM = "mnemonic"
+    TYPE_IMM = "immediate"
 
-    def __init__(self, weights: Optional[FeatureWeights] = None):
-        self.weights = weights or FeatureWeights()
+    def __init__(self, w_graph=1.0, w_mnem=0.05, w_imm=4.0):
+        # weights
+        self.w_graph = w_graph
+        self.w_mnem = w_mnem
+        self.w_imm = w_imm
+
+    def CalculateFunctionSimHash(self, graph, bit_size=128):
+        if bit_size % 64 != 0:
+            raise ValueError("Requested hash bit size must be a multiple of 64!")
+
+        full_flow_graph = FlowGraph(graph)
+        feature_cardnalities = defaultdict(int)
+        final_floats = [0.0]*bit_size
+
+        # graphlets (sub-graphs)
+        for node, dist in full_flow_graph.nodes_and_distance:
+            graphlet = full_flow_graph.GetSubgraph(graph, node, dist)
+            if graphlet is None:
+                continue
+
+            _id = self._hash_graph(graphlet, node, hash_index=0, counter=0)
+            card = feature_cardnalities[_id]
+            feature_cardnalities[_id] += 1
+            #feat_card_id = self._hash_graph(graphlet, node, card, 0)
+            # XXX: since we dont support the getWeight() function, its just the weight of that feature
+            weight = self.w_graph
+
+            # start ProcessSubgraph here
+            # calculate nbithash
+            _hashes = [
+                self._hash_graph(graphlet, node, hash_index=card, counter=(cntr + 1) * 64)
+                for cntr in range(bit_size // 64)
+            ]
+            # skip adding to feature hashes
+            self.AddWeightsInHashToOutput(final_floats, bit_size, weight, _hashes)
+
+        # mnemonics (instruction operations)
+        for mnem_tup in full_flow_graph.mnemonic_ngrams:
+            _id = self._hash_mnemonic_tuple(mnem_tup, hash_index=0)
+            card = feature_cardnalities[_id]
+            feature_cardnalities[_id] += 1
+            weight = self.w_mnem
+            _hashes = [
+                # TODO: might want to verify this is correct for hash_index
+                self._hash_mnemonic_tuple(mnem_tup, hash_index=card + (((cntr + 1) * 64) + 1))
+                for cntr in range(bit_size // 64)
+            ]
+            self.AddWeightsInHashToOutput(final_floats, bit_size, weight, _hashes)
+
+        # immediates
+        for imm in full_flow_graph.immediates:
+            _id = self._hash_immediate(imm, hash_index=0, counter=0)
+            card = feature_cardnalities[_id]
+            feature_cardnalities[_id] += 1
+            weight = self.w_imm
+            _hashes = [
+                self._hash_immediate(imm, hash_index=card, counter=(cntr + 1) * 64)
+                for cntr in range(bit_size // 64)
+            ]
+            self.AddWeightsInHashToOutput(final_floats, bit_size, weight, _hashes)
+
+        vals = self.FloatsToBits(final_floats)
+        return vals[:2]
+
+    def AddWeightsInHashToOutput(self, final_floats, bit_size, weight, hashes):
+        """
+        Updates final_floats in place
+        """
+        for bit_n in range(bit_size):
+            if self.GetNthBit(hashes, bit_n):
+                final_floats[bit_n] += weight
+            else:
+                final_floats[bit_n] -= weight
+
+    def _stable_hash(self, string: str) -> int:
+        b_str = string.encode()
+        return int(hashlib.md5(b_str).hexdigest(), 16)
+
+    def _hash_mnemonic_tuple(self, mnem_tuple: Tuple[str, str, str], hash_index=0):
+        m0, m1, m2 = mnem_tuple
+        value1 = (
+            self.SeedXForHashY(0, hash_index) ^ self.SeedXForHashY(1, hash_index) ^
+            self.SeedXForHashY(2, hash_index)
+        ) & mask64bit
+        value1 *= self._stable_hash(m0) & mask64bit
+        value1 = rotl64(value1, 7)
+        value1 *= self._stable_hash(m1) & mask64bit
+        value1 = rotl64(value1, 7)
+        value1 *= self._stable_hash(m2) & mask64bit
+        value1 = rotl64(value1, 7)
+        value1 *= (k2 * (hash_index + 1)) & mask64bit
+        return value1 & mask64bit
+
+    def _hash_immediate(self, immediate, hash_index=0, counter=0):
+        value1 = (
+            self.SeedXForHashY(0, hash_index) & mask64bit +
+            (counter * k0) & mask64bit +
+            (counter * k1) & mask64bit +
+            (counter * k2) & mask64bit
+        ) & mask64bit
+        value1 = rotl64(value1, 7)
+        value1 *= (immediate ^ self.SeedXForHashY(0, hash_index)) & mask64bit
+        value1 &= mask64bit
+        value1 = rotl64(value1, 7)
+        value1 *= (immediate ^ self.SeedXForHashY(1, hash_index)) & mask64bit
+        value1 &= mask64bit
+        value1 = rotl64(value1, 7)
+        value1 *= (immediate ^ self.SeedXForHashY(2, hash_index)) & mask64bit
+        value1 &= mask64bit
+        value1 = rotl64(value1, 7)
+        value1 *= ((k2 ^ immediate) * (hash_index + 1)) & mask64bit
+        value1 &= mask64bit
+        return value1
+
+    def _hash_graph(self, flow_graph: FlowGraph, start_node, hash_index=0, counter=0):
+        return flow_graph.CalculateHash(
+            start_node=start_node,
+            k0=self.SeedXForHashY(0, hash_index) * (counter + 1),
+            k1=self.SeedXForHashY(1, hash_index) * (counter + 1),
+            k2=self.SeedXForHashY(2, hash_index) * (counter + 1)
+        )
 
     #
     # Bit Utils
     #
 
     @staticmethod
-    def GetNthBit(nbit_hash, bitindex):
-        index = bitindex / 64
+    def FloatsToBits(floats: List[float]):
+        outputs = [0] * ((len(floats) // 64) + 1)
+        for index, _float in enumerate(floats):
+            vector_index = index // 64
+            bit_index = index % 64
+            if _float >= 0:
+                outputs[vector_index] |= (1 << bit_index)
+
+        return outputs
+
+    @staticmethod
+    def GetNthBit(nbit_hash: List[int], bitindex):
+        index = bitindex // 64
         value = nbit_hash[index]
         sub_word_index = bitindex % 64
         return (value >> sub_word_index) & 1
@@ -47,107 +170,10 @@ class FunctionSimHasher:
         else:
             raise ValueError("Invalid seed index")
 
-    #
-    #
-    #
-
-    #
-    # Graphlet Hashing
-    #
-
-    def HashGraph(self, graph: nx.DiGraph, start_node, hash_index, counter):
-        return self.CalculateDAGHash(
-            graph,
-            start_node,
-            k0=self.SeedXForHashY(0, hash_index) * (counter + 1),
-            k1=self.SeedXForHashY(1, hash_index) * (counter + 1),
-            k2=self.SeedXForHashY(2, hash_index) * (counter + 1)
-        )
-
     @staticmethod
-    def CalculateDAGHash(graph: nx.DiGraph, start_node=None, k0=0, k1=0, k2=0):
-        """
-        TODO: test this against the original function output!
-        """
-        if start_node is None:
-            _starts = list(node for node in graph.nodes if graph.in_degree(node) == 0)
-            if len(_starts) != 1:
-                raise ValueError("Graph must have exactly one start node is none is provided")
+    def hash_distance(h1: List[int], h2: List[int]):
+        total_dist = 0
+        for _h1, _h2 in zip(h1, h2):
+            total_dist += _h1 ^ _h2
 
-            start_node = _starts[0]
-
-        if start_node not in graph.nodes:
-            raise ValueError("Start node must be in the graph")
-
-        # compute the topological order of the graph and reconstruct that order
-        # for both the forward and backward edges based on the original code.
-        out_edges = defaultdict(list)
-        ordered_nodes = quasi_topological_sort_nodes(graph)
-        ordered_nodes = ordered_nodes[ordered_nodes.index(start_node):]
-        order_forward = {ordered_nodes[0]: 0}      # computed from out edges
-        order_backward = {}     # computed from in edges
-        order_both = {}         # computed from both edges
-        back_idx = 0
-        fwd_idx = 1
-        bi_idx = 0
-        for node in ordered_nodes:
-            for pred in graph.predecessors(node):
-                if pred not in order_backward:
-                    order_backward[pred] = back_idx
-                    back_idx += 1
-                if pred not in order_both:
-                    order_both[pred] = bi_idx
-                    bi_idx += 1
-                    order_both[node] = bi_idx
-                    bi_idx += 1
-            for succ in graph.successors(node):
-                out_edges[node].append(succ)
-                if succ not in order_forward:
-                    order_forward[succ] = fwd_idx
-                    fwd_idx += 1
-                if succ not in order_both:
-                    order_both[succ] = bi_idx
-                    bi_idx += 1
-                    order_both[node] = bi_idx
-                    bi_idx += 1
-
-        for node in ordered_nodes:
-            if node not in order_backward:
-                order_backward[node] = back_idx
-                back_idx += 1
-        in_degrees = {node: graph.in_degree(node) for node in ordered_nodes}
-        out_degrees = {node: graph.out_degree(node) for node in ordered_nodes}
-
-        hash_result = 0x0BADDEED600DDEED
-        for source, dst_nodes in out_edges.items():
-            per_edge_hash = 0x600DDEED0BADDEED
-            for target in dst_nodes:
-                per_edge_hash += (k0 * order_forward[source]) & mask64bit
-                per_edge_hash = rotl64(per_edge_hash, 7)
-                per_edge_hash += (k1 * order_backward[source]) & mask64bit
-                per_edge_hash = rotl64(per_edge_hash, 7)
-                per_edge_hash += (k2 * order_both[source]) & mask64bit
-                per_edge_hash = rotl64(per_edge_hash, 7)
-                per_edge_hash += (k0 * in_degrees[source]) & mask64bit
-                per_edge_hash = rotl64(per_edge_hash, 7)
-                per_edge_hash += (k1 * out_degrees[source]) & mask64bit
-                per_edge_hash = rotl64(per_edge_hash, 7)
-
-                per_edge_hash += (k2 * order_forward[target]) & mask64bit
-                per_edge_hash = rotl64(per_edge_hash, 7)
-                per_edge_hash += (k0 * order_backward[target]) & mask64bit
-                per_edge_hash = rotl64(per_edge_hash, 7)
-                per_edge_hash += (k1 * order_both[target]) & mask64bit
-                per_edge_hash = rotl64(per_edge_hash, 7)
-                per_edge_hash += (k2 * in_degrees[target]) & mask64bit
-                per_edge_hash = rotl64(per_edge_hash, 7)
-                per_edge_hash += (k0 * out_degrees[target]) & mask64bit
-                per_edge_hash = rotl64(per_edge_hash, 7)
-
-            hash_result += per_edge_hash
-
-        return hash_result
-
-
-
-
+        return total_dist
