@@ -83,9 +83,9 @@ def binary_to_ail_cfgs(
 
         # for this function you don't actually need the linear decompilation, but we run through the entire
         # decompilation process to assure every optimization is run that would be done on a normal Clinic graph
-        dec = proj.analyses.Decompiler(f, cfg=cfg, kb=cfg.kb, optimization_passes=all_optimizations)
-        dec.clinic.cc_graph.name = str(f.name)
-        ail_cfgs[str(f.name)] = dec.clinic.cc_graph if not supergraph else to_ail_supergraph(dec.clinic.cc_graph)
+        dec = proj.analyses.Decompiler(f, cfg=cfg, kb=cfg.kb, optimization_passes=all_optimizations, generate_code=False)
+        dec.ail_graph.name = str(f.name)
+        ail_cfgs[str(f.name)] = dec.ail_graph if not supergraph else to_ail_supergraph(dec.ail_graph)
 
     if make_generic:
         cfgs = [ail_cfg_to_generic(cfg, proj) for name, cfg in ail_cfgs.items()]
