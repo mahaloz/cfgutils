@@ -2,10 +2,6 @@ import hashlib
 from collections import defaultdict
 from typing import Dict, Optional, List, Tuple
 
-import networkx as nx
-
-from ...sorting import quasi_topological_sort_nodes
-from ...data import GenericBlock, GenericStatement
 from .flowgraph import FlowGraph
 from . import rotl64, mask64bit, seed0_, seed1_, seed2_, k0, k1, k2, mask32bit
 
@@ -77,7 +73,7 @@ class FunctionSimHasher:
             self.AddWeightsInHashToOutput(final_floats, bit_size, weight, _hashes)
 
         vals = self.FloatsToBits(final_floats)
-        return vals[:2]
+        return vals[:-1]
 
     def AddWeightsInHashToOutput(self, final_floats, bit_size, weight, hashes):
         """
