@@ -2,6 +2,8 @@ import sys
 import unittest
 from pathlib import Path
 
+import networkx as nx
+
 ANGR_AVAILABLE = True
 try:
     import angr
@@ -16,6 +18,20 @@ class TestAngrCFGTools(unittest.TestCase):
     def setUp(self):
         if not ANGR_AVAILABLE:
             self.skipTest("angr is not available")
+
+    def test_cfg_attrs(self):
+        from cfgutils.angr_utils.ail_graph_conv import binary_to_ail_cfgs
+        cfgs = binary_to_ail_cfgs(
+            TEST_FILES / "fmt_O0_noinline.o",
+            functions=["fmt"],
+            structuring_opts=False,
+            make_generic=True
+        )
+        cfg: nx.DiGraph = cfgs["fmt"]
+        for node, attr in cfg.nodes(data=True):
+            assert attr is not None
+            original_nodes = attr.get("original_nodes", {})
+            assert original_nodes
 
     def test_block_matcher(self):
         from cfgutils.angr_utils.ail_graph_conv import binary_to_ail_cfgs
