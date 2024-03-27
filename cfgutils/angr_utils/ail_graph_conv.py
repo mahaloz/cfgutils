@@ -104,13 +104,18 @@ def ail_cfg_to_generic(cfg: nx.DiGraph, project=None):
     new_cfg.name = cfg.name
     proj_cfg = project.kb.cfgs.get_most_accurate() if project is not None else None
     node_map = {}
-    for node in cfg.nodes:
+    for node, attr in cfg.nodes(data=True):
         new_node = GenericBlock(node.addr, idx=node.idx if hasattr(node, "idx") else None)
         for stmt in node.statements:
             str_stmt = stmt_to_pretty_text(stmt, project, proj_cfg) if project is not None else str(stmt)
             new_node.statements.append(str_stmt)
 
-        new_cfg.add_node(new_node, node=new_node)
+        attr = attr or {}
+        new_attr = attr.copy()
+        if "node" in new_attr:
+            del new_attr["node"]
+
+        new_cfg.add_node(new_node, node=new_node, **new_attr)
         node_map[node] = new_node
 
     for src, dst in cfg.edges:

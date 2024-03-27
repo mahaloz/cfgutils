@@ -21,12 +21,12 @@ def ged_max(g1, g2):
     return len(g1.nodes) + len(g1.edges) + len(g2.nodes) + len(g2.edges)
 
 
-def ged_exact(g1, g2, with_timeout=10):
+def ged_exact(g1, g2, with_timeout=10, check_max=False):
     """
     Computes the exact Graph Edit Distance for two graphs. On the event of a timeout,
     a score of None is returned.
     """
-    if len(g1.nodes) > MAX_NODES_FOR_EXACT_GED or len(g2.nodes) > MAX_NODES_FOR_EXACT_GED:
+    if check_max and (len(g1.nodes) > MAX_NODES_FOR_EXACT_GED or len(g2.nodes) > MAX_NODES_FOR_EXACT_GED):
         return None
 
     return graph_edit_distance_core_analysis(g1, g2, with_timeout=with_timeout, exact_score=True)
