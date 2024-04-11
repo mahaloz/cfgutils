@@ -31,7 +31,7 @@ from cfgutils.file_formats import save_cfg_as_png
 
 
 l = logging.getLogger(__name__)
-_DEBUG = True
+_DEBUG = False
 if _DEBUG:
     l.setLevel(logging.DEBUG)
 
