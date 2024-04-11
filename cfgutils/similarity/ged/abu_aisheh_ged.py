@@ -11,6 +11,9 @@ from cfgutils.similarity.ged import INVALID_CHOICE_PENALTY, collect_graph_roots
 
 _l = logging.getLogger(__name__)
 MAX_NODES_FOR_EXACT_GED = 12
+MIN_EXACT_TIME = 4
+MIN_UPPERBOUND_TIME = 3
+
 
 
 #

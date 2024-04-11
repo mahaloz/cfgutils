@@ -11,10 +11,24 @@ from .feat_extractor import AILBlockFeatureExtractor
 
 
 class AILBlockMatcher(BlockMatcherBase):
-    def __init__(self, g1: nx.DiGraph, g2: nx.DiGraph, proj1=None, proj2=None):
-        super().__init__(g1, g2)
+    TYP_VAR_NAMES = "var_names"
+    TYP_STACK_ADDRS = "stack_addrs"
+
+    def __init__(
+        self,
+        g1: nx.DiGraph,
+        g2: nx.DiGraph,
+        proj1=None,
+        proj2=None,
+        use_var_names=True,
+        match_confidence=0.6,
+        graph_match_pass=True,
+    ):
+        super().__init__(g1, g2, match_confidence=match_confidence, graph_match_pass=graph_match_pass)
         self._proj1 = proj1
         self._proj2 = proj2
+        self._use_var_names = use_var_names
+
         self._g1_cache = defaultdict(dict)
         self._g2_cache = defaultdict(dict)
         self.generate_feat_cache()
@@ -33,6 +47,8 @@ class AILBlockMatcher(BlockMatcherBase):
                 features[node][self.TYP_NO_BRANCH_INS] = len(feat_extractor.branch_ins)
                 features[node][self.TYP_STR_CONST] = feat_extractor.str_consts
                 features[node][self.TYP_NUM_CONST] = feat_extractor.num_consts
+                features[node][self.TYP_VAR_NAMES] = feat_extractor.var_names
+                features[node][self.TYP_STACK_ADDRS] = feat_extractor.stack_addrs
 
     def _get_correct_cache(self, graph):
         if graph == self._g1:
@@ -64,8 +80,12 @@ class AILBlockMatcher(BlockMatcherBase):
 
     def get_str_consts(self, block, graph) -> List[str]:
         cache = self._get_correct_cache(graph)
-        return cache[block][self.TYP_STR_CONST]
+        str_consts = cache[block][self.TYP_STR_CONST]
+        if self._use_var_names:
+            str_consts += cache[block][self.TYP_VAR_NAMES]
+
+        return str_consts
 
     def get_num_consts(self, block, graph) -> List[int]:
         cache = self._get_correct_cache(graph)
-        return cache[block][self.TYP_NUM_CONST]
+        return cache[block][self.TYP_NUM_CONST] + cache[block][self.TYP_STACK_ADDRS]

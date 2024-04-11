@@ -7,7 +7,6 @@ import ailment
 import networkx as nx
 import angr
 from angr.analyses.decompiler.optimization_passes import DUPLICATING_OPTS, CONDENSING_OPTS
-from angr.analyses.decompiler.utils import to_ail_supergraph
 
 from .prettyify_ail import stmt_to_pretty_text
 from cfgutils.data.generic_block import GenericBlock
@@ -155,3 +154,72 @@ def ail_pickle_to_cfg(pickle_path: Path):
 
     return new_cfg
 
+
+#
+# TODO: all of the following functions need to be removed when  is fixed
+#   this code was added as a hotfix to make the AIL CFGs supergraphs
+#
+
+def _merge_ail_nodes(graph, node_a: ailment.Block, node_b: ailment.Block) -> ailment.Block:
+    in_edges = list(graph.in_edges(node_a, data=True))
+    out_edges = list(graph.out_edges(node_b, data=True))
+
+    a_ogs = graph.nodes[node_a].get("original_nodes", set())
+    b_ogs = graph.nodes[node_b].get("original_nodes", set())
+    new_node = node_a.copy() if node_a.addr <= node_b.addr else node_b.copy()
+    old_node = node_b if new_node == node_a else node_a
+    # remove jumps in the middle of nodes when merging
+    if new_node.statements and isinstance(new_node.statements[-1], ailment.Stmt.Jump):
+        new_node.statements = new_node.statements[:-1]
+    new_node.statements += old_node.statements
+    new_node.original_size += old_node.original_size
+
+    graph.remove_node(node_a)
+    graph.remove_node(node_b)
+
+    if new_node is not None:
+        graph.add_node(new_node, original_nodes=a_ogs.union(b_ogs))
+        for src, _, data in in_edges:
+            if src is node_b:
+                src = new_node
+            graph.add_edge(src, new_node, **data)
+
+        for _, dst, data in out_edges:
+            if dst is node_a:
+                dst = new_node
+            graph.add_edge(new_node, dst, **data)
+
+    return new_node
+
+
+def to_ail_supergraph(transition_graph: nx.DiGraph) -> nx.DiGraph:
+    """
+    Takes an AIL graph and converts it into a AIL graph that treats calls and redundant jumps
+    as parts of a bigger block instead of transitions. Calls to returning functions do not terminate basic blocks.
+
+    Based on region_identifier super_graph
+
+    :return: A converted super transition graph
+    """
+    # make a copy of the graph
+    transition_graph = nx.DiGraph(transition_graph)
+    nx.set_node_attributes(transition_graph, {node: {node} for node in transition_graph.nodes}, "original_nodes")
+
+    while True:
+        for src, dst, data in transition_graph.edges(data=True):
+            type_ = data.get("type", None)
+
+            if len(list(transition_graph.successors(src))) == 1 and len(list(transition_graph.predecessors(dst))) == 1:
+                # calls in the middle of blocks OR boring jumps
+                # XXX: patch is here
+                _merge_ail_nodes(transition_graph, src, dst)
+                break
+
+            # calls to functions with no return
+            elif type_ == "call":
+                transition_graph.remove_node(dst)
+                break
+        else:
+            break
+
+    return transition_graph

@@ -15,10 +15,13 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Union, Set, Optional, Tuple
 import logging
+import time
 
 import networkx as nx
 
-from cfgutils.similarity.ged.abu_aisheh_ged import ged_upperbound, graph_edit_distance_core_analysis, MAX_NODES_FOR_EXACT_GED
+from cfgutils.similarity.ged.abu_aisheh_ged import (
+    ged_upperbound, graph_edit_distance_core_analysis, MAX_NODES_FOR_EXACT_GED, MIN_EXACT_TIME, MIN_UPPERBOUND_TIME
+)
 from cfgutils.regions import GraphRegion, RegionIdentifier
 from cfgutils.regions.utils import (
     expand_region_to_block_graph, expand_region_head_to_block, node_is_function_start, node_is_function_end
@@ -32,6 +35,7 @@ _DEBUG = False
 if _DEBUG:
     l.setLevel(logging.DEBUG)
 
+DEFAULT_LARGE_TIMEOUT = MIN_EXACT_TIME * 2
 
 def toggle_debug():
     global _DEBUG
@@ -495,6 +499,7 @@ def cfg_edit_distance(
     max_region_collapse=200,
     max_region_estimates=3,
     check_upperbound_approx=False,
+    timeout=None,
 ):
     """
     src_addr_to_line_map[address] = set(line1, line2, ...)
@@ -528,11 +533,13 @@ def cfg_edit_distance(
     max_cfged_score = len(src_cfg.nodes) + len(dec_cfg.nodes) + len(src_cfg.edges) + len(dec_cfg.edges)
     upperbound = max_cfged_score
     if check_upperbound_approx:
-        approx = ged_upperbound(dec_cfg, src_cfg, with_timeout=3)
+        approx = ged_upperbound(dec_cfg, src_cfg, with_timeout=MIN_UPPERBOUND_TIME)
         if approx is not None:
             upperbound = approx
 
+    start_time = time.time()
     while True:
+        curr_time = time.time()
         if unable_to_approx or curr_region_collapse >= max_region_collapse:
             if unable_to_approx:
                 l.debug(f"Unable to approximate the rest of the graph. Exiting early with max score!")
@@ -571,9 +578,18 @@ def cfg_edit_distance(
         else:
             dec_r_head, dec_r_cfg = dec_region.head, dec_region.graph
 
-        if dec_r_head is None:
-            l.debug(f"We are unable to match anymore small region heads, which means we must now approximate the rest.")
-            score = graph_edit_distance_core_analysis(dec_cfg, src_cfg, with_timeout=8)
+        if (dec_r_head is None) or (timeout is not None and curr_time - start_time > timeout):
+            big_timeout = DEFAULT_LARGE_TIMEOUT
+            if dec_r_head is None:
+                l.debug(f"We are unable to match anymore small region heads, which means we must now approximate the rest.")
+                if timeout is not None:
+                    time_left = timeout - (curr_time - start_time)
+                    if time_left > DEFAULT_LARGE_TIMEOUT:
+                        big_timeout = time_left
+            else:
+                l.debug(f"Timeout hit! Approximating the rest of the graph...")
+
+            score = graph_edit_distance_core_analysis(dec_cfg, src_cfg, with_timeout=big_timeout)
             if score is None:
                 unable_to_approx = True
                 continue
@@ -634,9 +650,9 @@ def cfg_edit_distance(
             distance = fast_switch_region_ged(expanded_dec_graph, expanded_src_graph)
         elif bad_successor_case:
             l.debug("Special Case Detected: Multi-Successor Region. Using edge-diffs for approx...")
-            distance = graph_edit_distance_core_analysis(dec_r_cfg, src_r_cfg, with_timeout=4)
+            distance = graph_edit_distance_core_analysis(dec_r_cfg, src_r_cfg, with_timeout=MIN_EXACT_TIME)
         else:
-            distance = graph_edit_distance_core_analysis(expanded_dec_graph, expanded_src_graph, with_timeout=4)
+            distance = graph_edit_distance_core_analysis(expanded_dec_graph, expanded_src_graph, with_timeout=MIN_EXACT_TIME)
 
         if distance is None:
             l.debug(f"Unable to compute the GED of the region, skipping...")
@@ -670,20 +686,20 @@ def cfg_edit_distance(
                 l.debug(f"In/Out Edge Diff: {edge_diff}")
                 cfged_score += edge_diff
 
-        if len(dec_cfg.nodes) <= 1 or len(src_cfg.nodes) <= 1:
-            distance = graph_edit_distance_core_analysis(dec_cfg, src_cfg, with_timeout=10)
-            if distance is None:
-                unable_to_approx = True
-                continue
-
-            cfged_score += distance
+        # if we have only a single node left in either graph, we can just add the remaining edges and nodes to
+        # the score (since there is only one way to construct the graph)
+        if len(dec_cfg.nodes) <= 1:
+            cfged_score += (len(src_cfg.nodes) + len(src_cfg.edges)) - len(dec_cfg.nodes)
+            break
+        elif len(src_cfg.nodes) <= 1:
+            cfged_score += (len(dec_cfg.nodes) + len(dec_cfg.edges)) - len(src_cfg.nodes)
             break
 
+        # reset blacklist and structuring check
         region_blacklist = set()
         redo_structuring = True
 
     l.debug(f"Final CFGED Score: {cfged_score}")
-
     # handle error cases.
     # this only will make sure scores from CFGED are always right, but these cases should all
     # be investigated and fixed if encountered.

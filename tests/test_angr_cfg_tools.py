@@ -10,6 +10,10 @@ try:
 except ImportError:
     ANGR_AVAILABLE = False
 
+if ANGR_AVAILABLE:
+    from cfgutils.angr_utils.ail_graph_conv import binary_to_ail_cfgs
+    from cfgutils.angr_utils.block_matcher import AILBlockMatcher
+    from angr.analyses.decompiler.utils import find_block_by_addr
 
 TEST_FILES = Path(__file__).parent / "data"
 
@@ -20,7 +24,6 @@ class TestAngrCFGTools(unittest.TestCase):
             self.skipTest("angr is not available")
 
     def test_cfg_attrs(self):
-        from cfgutils.angr_utils.ail_graph_conv import binary_to_ail_cfgs
         cfgs = binary_to_ail_cfgs(
             TEST_FILES / "fmt_O0_noinline.o",
             functions=["fmt"],
@@ -34,10 +37,6 @@ class TestAngrCFGTools(unittest.TestCase):
             assert original_nodes
 
     def test_block_matcher(self):
-        from cfgutils.angr_utils.ail_graph_conv import binary_to_ail_cfgs
-        from cfgutils.angr_utils.block_matcher import AILBlockMatcher
-        from angr.analyses.decompiler.utils import find_block_by_addr
-
         cfgs0, p0 = binary_to_ail_cfgs(
             TEST_FILES / "fmt_O0_noinline.o",
             functions=["main"],
@@ -60,8 +59,8 @@ class TestAngrCFGTools(unittest.TestCase):
         mappings = matcher.mapping
 
         # TODO: add more assertions
-        o0_blk = find_block_by_addr(main_o0, 0x4005e6)
-        o2_blk = find_block_by_addr(main_o2, 0x40cb40)
+        o0_blk = find_block_by_addr(main_o0, 0x400862)
+        o2_blk = find_block_by_addr(main_o2, 0x40ce2b)
         assert mappings[o0_blk] == o2_blk
 
 
