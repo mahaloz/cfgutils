@@ -25,7 +25,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install flake8 pytest
         sudo apt-get update && sudo apt-get install graphviz-dev -y
-        pip install .[test]
+        pip install .[test] angr
 
     - name: Pytest
       run: |

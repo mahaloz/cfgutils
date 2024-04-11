@@ -91,16 +91,16 @@ class AILBlockFeatureExtractor(AILBlockWalkerBase):
         return super()._handle_Store(stmt_idx, stmt, block)
 
     def _handle_Load(self, expr_idx: int, expr: Load, stmt_idx: int, stmt: Statement, block: Optional[Block]):
-        if expr.variable is not None and expr.variable.name is not None:
+        if hasattr(expr, "variable") and expr.variable is not None and expr.variable.name is not None:
             self.var_names.append(expr.variable.name)
 
         return super()._handle_Load(expr_idx, expr, stmt_idx, stmt, block)
 
     def _handle_Assignment(self, stmt_idx: int, stmt: Assignment, block: Optional[Block]):
-        if stmt.dst is not None and stmt.dst.variable is not None and stmt.dst.variable.name is not None:
+        if hasattr(stmt.dst, "variable") and stmt.dst.variable is not None and stmt.dst.variable.name is not None:
             self.var_names.append(stmt.dst.variable.name)
 
-        if stmt.src is not None and stmt.src.variable is not None and stmt.src.variable.name is not None:
+        if hasattr(stmt.src, "variable") and stmt.src.variable is not None and stmt.src.variable.name is not None:
             self.var_names.append(stmt.src.variable.name)
 
         return super()._handle_Assignment(stmt_idx, stmt, block)

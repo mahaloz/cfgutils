@@ -59,8 +59,8 @@ class TestAngrCFGTools(unittest.TestCase):
         mappings = matcher.mapping
 
         # TODO: add more assertions
-        o0_blk = find_block_by_addr(main_o0, 0x4005e6)
-        o2_blk = find_block_by_addr(main_o2, 0x40cb40)
+        o0_blk = find_block_by_addr(main_o0, 0x400862)
+        o2_blk = find_block_by_addr(main_o2, 0x40ce2b)
         assert mappings[o0_blk] == o2_blk
 
 
