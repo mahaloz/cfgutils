@@ -582,9 +582,10 @@ def cfg_edit_distance(
             big_timeout = DEFAULT_LARGE_TIMEOUT
             if dec_r_head is None:
                 l.debug(f"We are unable to match anymore small region heads, which means we must now approximate the rest.")
-                time_left = timeout - (curr_time - start_time)
-                if time_left > DEFAULT_LARGE_TIMEOUT:
-                    big_timeout = time_left
+                if timeout is not None:
+                    time_left = timeout - (curr_time - start_time)
+                    if time_left > DEFAULT_LARGE_TIMEOUT:
+                        big_timeout = time_left
             else:
                 l.debug(f"Timeout hit! Approximating the rest of the graph...")
 
