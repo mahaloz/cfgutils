@@ -23,11 +23,11 @@ class GenericBlock:
 
     def __repr__(self):
         type_str = " (exit)" if self.is_exitpoint else " (entry)" if self.is_entrypoint else ""
-        return f"<Block: {self.addr}{self._idx_str}{type_str}>"
+        return f"<Block: {hex(self.addr)}{self._idx_str}{type_str}>"
 
     def __str__(self):
         type_str = " (exit)" if self.is_exitpoint else " (entry)" if self.is_entrypoint else ""
-        output = f"{self.addr}{self._idx_str}{type_str}:\n"
+        output = f"{hex(self.addr)}{self._idx_str}{type_str}:\n"
         for stmt in self.statements:
             str_stmt = str(stmt)
             if len(str_stmt) > 80:

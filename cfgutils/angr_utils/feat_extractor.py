@@ -1,10 +1,10 @@
 from typing import Optional, Any
 
-from ailment import BinaryOp, UnaryOp
+from ailment import BinaryOp, UnaryOp, Assignment
 from ailment.block_walker import AILBlockWalkerBase
 from ailment.block import Block
-from ailment.statement import Call, ConditionalJump, Statement
-from ailment.expression import Const
+from ailment.statement import Call, ConditionalJump, Statement, Store
+from ailment.expression import Const, StackBaseOffset, BasePointerOffset, Load
 
 from .prettyify_ail import string_at_addr
 
@@ -34,8 +34,11 @@ class AILBlockFeatureExtractor(AILBlockWalkerBase):
         self.branch_ins = []
         self.str_consts = []
         self.num_consts = []
+        self.stack_addrs = []
+        self.var_names = []
 
         super().__init__()
+        self.expr_handlers[StackBaseOffset] = self._handle_StackBaseOffset
 
     def _handle_stmt(self, stmt_idx: int, stmt: Statement, block: Optional[Block]) -> Any:
         self.ins.append(stmt)
@@ -77,3 +80,27 @@ class AILBlockFeatureExtractor(AILBlockWalkerBase):
 
         return super()._handle_Const(expr_idx, expr, stmt_idx, stmt, block)
 
+    def _handle_StackBaseOffset(self, expr_idx: int, expr: "StackBaseOffset", stmt_idx: int, stmt: Statement, block: Optional[Block]):
+        self.stack_addrs.append(expr.offset)
+        return None
+
+    def _handle_Store(self, stmt_idx: int, stmt: Store, block: Optional[Block]):
+        if stmt.variable is not None and stmt.variable.name is not None:
+            self.var_names.append(stmt.variable.name)
+
+        return super()._handle_Store(stmt_idx, stmt, block)
+
+    def _handle_Load(self, expr_idx: int, expr: Load, stmt_idx: int, stmt: Statement, block: Optional[Block]):
+        if expr.variable is not None and expr.variable.name is not None:
+            self.var_names.append(expr.variable.name)
+
+        return super()._handle_Load(expr_idx, expr, stmt_idx, stmt, block)
+
+    def _handle_Assignment(self, stmt_idx: int, stmt: Assignment, block: Optional[Block]):
+        if stmt.dst is not None and stmt.dst.variable is not None and stmt.dst.variable.name is not None:
+            self.var_names.append(stmt.dst.variable.name)
+
+        if stmt.src is not None and stmt.src.variable is not None and stmt.src.variable.name is not None:
+            self.var_names.append(stmt.src.variable.name)
+
+        return super()._handle_Assignment(stmt_idx, stmt, block)
