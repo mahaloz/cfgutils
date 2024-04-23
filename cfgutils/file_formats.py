@@ -1,10 +1,11 @@
+from typing import Union
 from pathlib import Path
 
 import networkx as nx
 import graphviz
 
 
-def save_cfg_as_png(cfg: nx.DiGraph, output_path: Path):
+def save_cfg_as_png(cfg: nx.DiGraph, output_path: Union[Path, str]):
     output_path = Path(output_path)
     tmp_path = output_path.with_suffix(".dot")
     nx.drawing.nx_agraph.write_dot(cfg, str(tmp_path))

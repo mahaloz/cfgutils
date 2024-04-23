@@ -46,7 +46,9 @@ class BlockMatcherBase:
         use_inv_map=False,
         assume_rooted=True,
         graph_match_pass=False,
-        match_confidence=0.0
+        match_confidence=0.0,
+        root_dist_tie_breaker=True,
+        mapping=None,
     ):
         self._g1 = g1
         self._g2 = g2
@@ -54,6 +56,7 @@ class BlockMatcherBase:
         self._use_inv_map = use_inv_map
         self._graph_match_pass = graph_match_pass
         self._assume_rooted = assume_rooted
+        self._root_dist_tie_breaker = root_dist_tie_breaker
         self.match_confidence = match_confidence
 
         self._g1_nodes = list(g1.nodes)
@@ -63,7 +66,19 @@ class BlockMatcherBase:
             g2: self._generate_topological_dist_map(g2)
         }
 
-        self.mapping = {}
+        self._g1_root, self._g2_root = None, None
+        if self._assume_rooted:
+            self._g1_root = next(n for n in self._g1_nodes if self._g1.in_degree(n) == 0)
+            self._g2_root = next(n for n in self._g2_nodes if self._g2.in_degree(n) == 0)
+
+        self._root_dist = {}
+        if self._root_dist_tie_breaker and self._assume_rooted:
+            self._root_dist = {
+                g1: nx.single_source_shortest_path_length(g1, self._g1_root),
+                g2: nx.single_source_shortest_path_length(g2, self._g2_root),
+            }
+
+        self.mapping = mapping or {}
 
     def neighbour_match_nodes(self, g1: nx.DiGraph, g2: nx.DiGraph):
         changes = True
@@ -95,16 +110,21 @@ class BlockMatcherBase:
         return attempts > 1
 
     def analyze(self):
-        # TODO: add a way to first match nodes with exact call matches
-        # TODO: add a way to match nodes with exact long string matches
-        b1_b2_map, best_b2_scores = self.generate_similarities(get_best_inv_map=True)
-
+        # mark all nodes provided already as matches
         used_b2 = set()
+        for _, g2_node in self.mapping.items():
+            used_b2.add(g2_node)
+
+        b1_b2_map, best_b2_scores = self.generate_similarities(get_best_inv_map=True)
         if self._assume_rooted:
-            g1_root = next(n for n in self._g1_nodes if self._g1.in_degree(n) == 0)
-            g2_root = next(n for n in self._g2_nodes if self._g2.in_degree(n) == 0)
-            self.mapping[g1_root] = g2_root
-            used_b2.add(g2_root)
+            self.mapping[self._g1_root] = self._g2_root
+            used_b2.add(self._g2_root)
+
+            g1_exits = [n for n in self._g1_nodes if self._g1.out_degree(n) == 0]
+            g2_exits = [n for n in self._g2_nodes if self._g2.out_degree(n) == 0]
+            if len(g1_exits) == len(g2_exits) == 1:
+                self.mapping[g1_exits[0]] = g2_exits[0]
+                used_b2.add(g2_exits[0])
 
         if self._use_inv_map:
             # first, map every b2 to the b1 that matches it best
@@ -121,6 +141,17 @@ class BlockMatcherBase:
                 continue
 
             best_matches = sorted(b2_scores.items(), key=lambda x: x[1], reverse=True)
+            best_score = best_matches[0][1]
+            top_score_matches = [b2 for b2, score in best_matches if score == best_score]
+
+            # if tie-break enable, attempt to resolve the top-level ties (anything after is ok...)
+            if len(top_score_matches) > 1 and self._root_dist_tie_breaker:
+                b1_dist = self._root_dist[self._g1][b1]
+                _best_first_matches = sorted(
+                    best_matches[:len(top_score_matches)], key=lambda x: abs(b1_dist - self._root_dist[self._g2][x[0]])
+                )
+                best_matches = _best_first_matches + best_matches[len(top_score_matches):]
+
             for blk_match, score in best_matches:
                 # scores are ordered, so if the top score is below the confidence, we can break
                 if score < self.match_confidence:
