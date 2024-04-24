@@ -589,11 +589,10 @@ def cfg_edit_distance(
             else:
                 l.debug(f"Timeout hit! Approximating the rest of the graph...")
 
-            # supergraph them once more, since this is the last pass!
-            dec_cfg, src_cfg = to_supergraph(dec_cfg), to_supergraph(src_cfg)
             if _DEBUG:
                 save_cfg_as_png(src_cfg, Path(f"./src_cfg_{curr_region_collapse}.png"))
                 save_cfg_as_png(dec_cfg, Path(f"./dec_cfg_{curr_region_collapse}.png"))
+
             score = graph_edit_distance_core_analysis(dec_cfg, src_cfg, with_timeout=big_timeout)
             if score is None:
                 unable_to_approx = True
@@ -716,6 +715,3 @@ def cfg_edit_distance(
         return upperbound
     else:
         return cfged_score
-
-
-
