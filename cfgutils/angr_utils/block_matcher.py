@@ -76,10 +76,21 @@ class AILBlockMatcher(BlockMatcherBase):
             if len(choices) == 1:
                 mapping[b1] = choices[0]
             else:
-                for choice in choices:
-                    if self._root_dist[self._g1][b1] == self._root_dist[self._g2][choice]:
-                        mapping[b1] = choice
-                        break
+                # first attempt to eliminate all choices with different edge amounts
+                same_edge_choices = [
+                    choice for choice in choices
+                    if len(list(self._g2.predecessors(choice))) == len(list(self._g1.predecessors(b1))) and
+                    len(list(self._g2.successors(choice))) == len(list(self._g1.successors(b1)))
+                ]
+                if len(same_edge_choices) == 1:
+                    mapping[b1] = same_edge_choices[0]
+                # if we still have multiple choices, we must use root distance to know truth
+                # go back to before and use root distance to choose
+                else:
+                    for choice in choices:
+                        if self._root_dist[self._g1][b1] == self._root_dist[self._g2][choice]:
+                            mapping[b1] = choice
+                            break
 
         return mapping
 

@@ -49,6 +49,7 @@ class BlockMatcherBase:
         match_confidence=0.0,
         root_dist_tie_breaker=True,
         mapping=None,
+        out_edges_must_match=True,
     ):
         self._g1 = g1
         self._g2 = g2
@@ -57,6 +58,7 @@ class BlockMatcherBase:
         self._graph_match_pass = graph_match_pass
         self._assume_rooted = assume_rooted
         self._root_dist_tie_breaker = root_dist_tie_breaker
+        self._out_edges_must_match = out_edges_must_match
         self.match_confidence = match_confidence
 
         self._g1_nodes = list(g1.nodes)
@@ -78,6 +80,7 @@ class BlockMatcherBase:
                 g2: nx.single_source_shortest_path_length(g2, self._g2_root),
             }
 
+        self._used_b2 = set()
         self.mapping = mapping or {}
 
     def neighbour_match_nodes(self, g1: nx.DiGraph, g2: nx.DiGraph):
@@ -111,29 +114,29 @@ class BlockMatcherBase:
 
     def analyze(self):
         # mark all nodes provided already as matches
-        used_b2 = set()
+        self._used_b2 = set()
         for _, g2_node in self.mapping.items():
-            used_b2.add(g2_node)
+            self._used_b2.add(g2_node)
 
         b1_b2_map, best_b2_scores = self.generate_similarities(get_best_inv_map=True)
         if self._assume_rooted:
             self.mapping[self._g1_root] = self._g2_root
-            used_b2.add(self._g2_root)
+            self._used_b2.add(self._g2_root)
 
             g1_exits = [n for n in self._g1_nodes if self._g1.out_degree(n) == 0]
             g2_exits = [n for n in self._g2_nodes if self._g2.out_degree(n) == 0]
             if len(g1_exits) == len(g2_exits) == 1:
                 self.mapping[g1_exits[0]] = g2_exits[0]
-                used_b2.add(g2_exits[0])
+                self._used_b2.add(g2_exits[0])
 
         if self._use_inv_map:
             # first, map every b2 to the b1 that matches it best
             for b2, b1 in best_b2_scores.items():
-                if (b2 in used_b2) or (b1 in self.mapping):
+                if (b2 in self._used_b2) or (b1 in self.mapping):
                     continue
 
                 self.mapping[b1] = b2
-                used_b2.add(b2)
+                self._used_b2.add(b2)
 
         # then, map the rest of the b1s to the b2s that match them best
         for b1, b2_scores in b1_b2_map.items():
@@ -143,6 +146,11 @@ class BlockMatcherBase:
             best_matches = sorted(b2_scores.items(), key=lambda x: x[1], reverse=True)
             best_score = best_matches[0][1]
             top_score_matches = [b2 for b2, score in best_matches if score == best_score]
+            # eliminate missing edge matches
+            if self._out_edges_must_match:
+                top_score_matches = [
+                    b2 for b2 in top_score_matches if set(self._g1.successors(b1)) == set(self._g2.successors(b2))
+                ]
 
             # if tie-break enable, attempt to resolve the top-level ties (anything after is ok...)
             if len(top_score_matches) > 1 and self._root_dist_tie_breaker:
@@ -157,9 +165,9 @@ class BlockMatcherBase:
                 if score < self.match_confidence:
                     break
 
-                if blk_match not in used_b2:
+                if blk_match not in self._used_b2:
                     self.mapping[b1] = blk_match
-                    used_b2.add(blk_match)
+                    self._used_b2.add(blk_match)
                     break
             else:
                 # if no match was found at all, we must be out of b2s

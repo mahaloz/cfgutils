@@ -125,5 +125,9 @@ class AILBlockFeatureExtractor(AILBlockWalkerBase):
                 func_name = self._project.kb.functions[func_addr].name
             elif func_addr in self._call_name_fallback_addrs:
                 func_name = self._call_name_fallback_addrs[func_addr]
+        if isinstance(call_expr.target, Load) and isinstance(call_expr.target.addr, StackBaseOffset):
+            # convert to lookup format
+            k = f"s_{hex(call_expr.target.addr.offset)}"
+            func_name = self._call_name_fallback_addrs.get(k, None)
 
         return func_name
