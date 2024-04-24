@@ -22,9 +22,10 @@ class AILBlockFeatureExtractor(AILBlockWalkerBase):
         "Or", "Shl", "Shr", "Sar", "Ror", "Rol", "Not"
     }
 
-    def __init__(self, project=None, project_cfg=None):
+    def __init__(self, project=None, project_cfg=None, call_name_fallback=None):
         self._project = project
         self._project_cfg = project_cfg
+        self._call_name_fallback_addrs = call_name_fallback or {}
 
         # features
         self.arith_ins = []
@@ -36,6 +37,7 @@ class AILBlockFeatureExtractor(AILBlockWalkerBase):
         self.num_consts = []
         self.stack_addrs = []
         self.var_names = []
+        self.call_names = []
 
         super().__init__()
         self.expr_handlers[StackBaseOffset] = self._handle_StackBaseOffset
@@ -62,10 +64,16 @@ class AILBlockFeatureExtractor(AILBlockWalkerBase):
 
     def _handle_CallExpr(self, expr_idx: int, expr: "Call", stmt_idx: int, stmt, block: Optional["Block"]):
         self.calls.append(expr)
+        func_name = self._resolve_call_name(expr)
+        if func_name is not None:
+            self.call_names.append(func_name)
         super()._handle_CallExpr(expr_idx, expr, stmt_idx, stmt, block)
 
     def _handle_Call(self, stmt_idx: int, stmt: "Call", block: Optional["Block"]):
         self.calls.append(stmt)
+        func_name = self._resolve_call_name(stmt)
+        if func_name is not None:
+            self.call_names.append(func_name)
         super()._handle_Call(stmt_idx, stmt, block)
 
     def _handle_Const(self, expr_idx: int, expr: "Const", stmt_idx: int, stmt: Statement, block: Optional[Block]):
@@ -104,3 +112,22 @@ class AILBlockFeatureExtractor(AILBlockWalkerBase):
             self.var_names.append(stmt.src.variable.name)
 
         return super()._handle_Assignment(stmt_idx, stmt, block)
+
+    #
+    # utils
+    #
+
+    def _resolve_call_name(self, call_expr):
+        func_name = None
+        if isinstance(call_expr.target, Const):
+            func_addr = call_expr.target.value
+            if self._project is not None and func_addr in self._project.kb.functions and not self._project.kb.functions[func_addr].name.startswith("sub_"):
+                func_name = self._project.kb.functions[func_addr].name
+            elif func_addr in self._call_name_fallback_addrs:
+                func_name = self._call_name_fallback_addrs[func_addr]
+        if isinstance(call_expr.target, Load) and isinstance(call_expr.target.addr, StackBaseOffset):
+            # convert to lookup format
+            k = f"s_{hex(call_expr.target.addr.offset)}"
+            func_name = self._call_name_fallback_addrs.get(k, None)
+
+        return func_name

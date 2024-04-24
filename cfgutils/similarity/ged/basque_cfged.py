@@ -28,6 +28,7 @@ from cfgutils.regions.utils import (
 )
 from cfgutils.data import GenericBlock
 from cfgutils.file_formats import save_cfg_as_png
+from cfgutils.transformations import to_supergraph
 
 
 l = logging.getLogger(__name__)
@@ -548,7 +549,6 @@ def cfg_edit_distance(
             return cfged_score + len(src_cfg.nodes) + len(dec_cfg.nodes) + len(src_cfg.edges) + len(dec_cfg.edges)
 
         l.debug(f"Running region collapse round {curr_region_collapse}...")
-        # supergraph it!
         if redo_structuring:
             # src_cfg, dec_cfg = to_jil_supergraph(src_cfg), to_jil_supergraph(dec_cfg)
             src_nodes, dec_nodes = addr_to_node_map(src_cfg), addr_to_node_map(dec_cfg)
@@ -588,6 +588,10 @@ def cfg_edit_distance(
                         big_timeout = time_left
             else:
                 l.debug(f"Timeout hit! Approximating the rest of the graph...")
+
+            if _DEBUG:
+                save_cfg_as_png(src_cfg, Path(f"./src_cfg_{curr_region_collapse}.png"))
+                save_cfg_as_png(dec_cfg, Path(f"./dec_cfg_{curr_region_collapse}.png"))
 
             score = graph_edit_distance_core_analysis(dec_cfg, src_cfg, with_timeout=big_timeout)
             if score is None:
@@ -711,6 +715,3 @@ def cfg_edit_distance(
         return upperbound
     else:
         return cfged_score
-
-
-

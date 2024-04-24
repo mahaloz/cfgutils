@@ -36,7 +36,14 @@ def binary_to_ail_cfgs(
         raise FileNotFoundError(f"{binary_path} does not exist")
 
     proj = angr.Project(binary_path, auto_load_libs=False)
-    cfg = proj.analyses.CFG(show_progressbar=False, normalize=True, data_references=True)
+    func_starts = None
+    if functions is not None and all(isinstance(func, int) for func in functions):
+        func_starts = functions
+
+    cfg = proj.analyses.CFG(
+        show_progressbar=False, normalize=True, data_references=True, resolve_indirect_jumps=True,
+        function_starts=func_starts
+    )
     try:
         proj.analyses.CompleteCallingConventions(cfg=cfg, recover_variables=True, analyze_callsites=True)
         cc_failed = False
