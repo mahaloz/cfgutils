@@ -69,7 +69,7 @@ def binary_to_ail_cfgs(
             func.name = func.name[:func.name.index(".")]
 
     # some optimizations can drastically change the structure of the CFG, so we should disable some if wanted
-    all_optimizations = angr.analyses.decompiler.optimization_passes.get_default_optimization_passes(
+    all_optimizations = angr.analyses.decompiler.optimization_passes.get_optimization_passes(
         proj.arch, "linux"
     )
     if not structuring_opts:
