@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Dict, Union, Set, Optional, Tuple
 import logging
 import time
+import os
 
 import networkx as nx
 
@@ -32,7 +33,7 @@ from cfgutils.transformations import to_supergraph
 
 
 l = logging.getLogger(__name__)
-_DEBUG = False
+_DEBUG = bool(os.getenv("DEBUG", False)) or False
 if _DEBUG:
     l.setLevel(logging.DEBUG)
 
