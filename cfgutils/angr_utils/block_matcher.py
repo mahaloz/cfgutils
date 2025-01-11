@@ -29,6 +29,7 @@ class AILBlockMatcher(BlockMatcherBase):
         caller_name_mapping=None,
         root_dist_tie_breaker=True,
         match_exact_calls=True,
+        assume_rooted=True,
     ):
         super().__init__(
             g1,
@@ -36,7 +37,8 @@ class AILBlockMatcher(BlockMatcherBase):
             match_confidence=match_confidence,
             graph_match_pass=graph_match_pass,
             mapping=mapping,
-            root_dist_tie_breaker=root_dist_tie_breaker
+            root_dist_tie_breaker=root_dist_tie_breaker,
+            assume_rooted=assume_rooted,
         )
         self._proj1 = proj1
         self._proj2 = proj2
