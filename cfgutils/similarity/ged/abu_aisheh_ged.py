@@ -3,6 +3,7 @@
 #
 
 import logging
+import os
 
 import networkx as nx
 
@@ -14,6 +15,9 @@ MAX_NODES_FOR_EXACT_GED = 12
 MIN_EXACT_TIME = 4
 MIN_UPPERBOUND_TIME = 3
 
+_DEBUG = bool(os.getenv("DEBUG", False)) or False
+if _DEBUG:
+    _l.setLevel(logging.DEBUG)
 
 
 #
@@ -104,7 +108,7 @@ def ged_explained(g1, g2, print_explanation=True, only_addrs=True):
 
     # reupdate lists to only have addrs
 
-    return human_v_edits + human_e_edits
+    return human_v_edits + human_e_edits, cost
 
 #
 # Updates to the original GED algorithm
@@ -192,9 +196,14 @@ def graph_edit_distance_core_analysis(
         except TimeoutError:
             dist = None
     else:
-        dist = nx.graph_edit_distance(
-            g1, g2, roots=roots, timeout=with_timeout, node_subst_cost=_node_sub_cost, edge_subst_cost=_edge_sub_cost,
-        )
+        if _DEBUG:
+            edit_path, dist = ged_explained(
+                g1, g2, print_explanation=True, only_addrs=False
+            )
+        else:
+            dist = nx.graph_edit_distance(
+                g1, g2, roots=roots, timeout=with_timeout, node_subst_cost=_node_sub_cost, edge_subst_cost=_edge_sub_cost,
+            )
 
     # sometimes the score can be computed wrong, which we can fix with a recompute ONCE
     if dist is not None and dist >= INVALID_CHOICE_PENALTY and recover_on_invalid_edits:
