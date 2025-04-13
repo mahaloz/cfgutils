@@ -15,7 +15,7 @@ class TestGraphEditDistance(unittest.TestCase):
         """
 
         g1, g2 = CROSS_JUMP_OPT_GRAPHS
-        human_readable_edits = ged_explained(g1, g2, print_explanation=True, only_addrs=True)
+        human_readable_edits, edits = ged_explained(g1, g2, print_explanation=True, only_addrs=True)
         real_ged_score = ged_exact(g1, g2)
 
         # gather expected edits from docstring

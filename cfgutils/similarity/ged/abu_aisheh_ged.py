@@ -89,24 +89,25 @@ def ged_explained(g1, g2, print_explanation=True, only_addrs=True):
     human_e_edits = list(sorted(human_e_edits, key=lambda x: x.startswith("del"), reverse=True))
 
     if print_explanation:
-        print("\n=====================================================================")
-        print(f"There are {len(paths)} possible edit strategies to turn g1 into g2")
-        print(f"in {cost} steps. Showing the first one:")
-        print("=====================================================================")
+        if cost:
+            print("\n=====================================================================")
+            print(f"There are {len(paths)} possible edit strategies to turn g1 into g2")
+            print(f"in {cost} steps. Showing the first one:")
+            print("=====================================================================")
 
-        if human_v_swaps:
-            print("Vertex Swaps (free): ")
-            for v_swap in human_v_swaps:
-                print(f"    {v_swap}")
-        print("Vertex Edits:")
-        for v_edit in human_v_edits:
-            print(f"    {v_edit}")
-        print("Edge Edits:")
-        for e_edit in human_e_edits:
-            print(f"    {e_edit}")
-        print("=====================================================================")
-
-    # reupdate lists to only have addrs
+            if human_v_swaps:
+                print("Vertex Swaps (free): ")
+                for v_swap in human_v_swaps:
+                    print(f"    {v_swap}")
+            print("Vertex Edits:")
+            for v_edit in human_v_edits:
+                print(f"    {v_edit}")
+            print("Edge Edits:")
+            for e_edit in human_e_edits:
+                print(f"    {e_edit}")
+            print("=====================================================================")
+        else:
+            print("No cost to explain. All edits were swaps.")
 
     return human_v_edits + human_e_edits, cost
 
