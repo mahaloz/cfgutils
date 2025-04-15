@@ -14,9 +14,22 @@ from cfgutils.data.generic_block import GenericBlock
 _l = logging.getLogger(__name__)
 
 
+def _set_decompiler_option(decompiler_options_strs: tuple[str, object]) -> list[tuple]:
+    decompiler_options = []
+    if not decompiler_options_strs:
+        return decompiler_options
+
+    for param, value in decompiler_options_strs:
+        for option in angr.analyses.decompiler.decompilation_options.options:
+            if param == option.param:
+                decompiler_options.append((option, value))
+
+    return decompiler_options
+
+
 def binary_to_ail_cfgs(
     binary_path: Path, functions=None, make_generic=False, structuring_opts=True, supergraph=True,
-    return_project=False,
+    return_project=False, decompiler_options=None
 ) -> Union[Dict[str, nx.DiGraph], Tuple[Dict[str, nx.DiGraph], angr.Project]]:
     """
     A simple wrapper around the angr decompiler to simply use the defaults and return the AIL CFGs which
@@ -30,6 +43,8 @@ def binary_to_ail_cfgs(
     :param structuring_opts: Enable or disable structuring optimizations
     :param supergraph: Convert the AIL CFGs to supergraphs
     :param return_project: Return the angr Project object as well
+    :param decompiler_options: A list of tuples containing the decompiler options to set. Each tuple should be
+        in the format (option_name, option_value). See angr documentation for available options.
     """
     binary_path = Path(binary_path).absolute()
     if not binary_path.exists():
@@ -89,7 +104,10 @@ def binary_to_ail_cfgs(
 
         # for this function you don't actually need the linear decompilation, but we run through the entire
         # decompilation process to assure every optimization is run that would be done on a normal Clinic graph
-        dec = proj.analyses.Decompiler(f, cfg=cfg, kb=cfg.kb, optimization_passes=all_optimizations, generate_code=False)
+        dec = proj.analyses.Decompiler(
+            f, cfg=cfg, kb=cfg.kb, optimization_passes=all_optimizations, generate_code=False,
+            options=_set_decompiler_option(decompiler_options)
+        )
         dec.ail_graph.name = str(f.name)
         ail_cfgs[str(f.name)] = dec.ail_graph if not supergraph else to_ail_supergraph(dec.ail_graph)
 
