@@ -8,6 +8,7 @@ import os
 import networkx as nx
 
 from cfgutils.os_utils import timeout
+from cfgutils.similarity import fast_is_isomorphic
 from cfgutils.similarity.ged import INVALID_CHOICE_PENALTY, collect_graph_roots
 
 _l = logging.getLogger(__name__)
@@ -18,7 +19,6 @@ MIN_UPPERBOUND_TIME = 3
 _DEBUG = bool(os.getenv("DEBUG", False)) or False
 if _DEBUG:
     _l.setLevel(logging.DEBUG)
-
 
 #
 # Edit distance
@@ -33,6 +33,9 @@ def ged_exact(g1, g2, with_timeout=10, check_max=False):
     Computes the exact Graph Edit Distance for two graphs. On the event of a timeout,
     a score of None is returned.
     """
+    if fast_is_isomorphic(g1, g2):
+        return 0
+
     if check_max and (len(g1.nodes) > MAX_NODES_FOR_EXACT_GED or len(g2.nodes) > MAX_NODES_FOR_EXACT_GED):
         return None
 
@@ -175,6 +178,9 @@ def graph_edit_distance_core_analysis(
     g1: nx.DiGraph, g2: nx.DiGraph, is_cfg=True, upperbound_approx=False, exact_score=False, with_timeout=10,
     penalize_root_exit_edits=True, recover_on_invalid_edits=True
 ):
+    if fast_is_isomorphic(g1, g2):
+        return 0
+
     roots = collect_graph_roots(g1, g2) if is_cfg else None
 
     _node_sub_cost = None

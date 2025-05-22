@@ -20,8 +20,9 @@ import os
 
 import networkx as nx
 
+from cfgutils.similarity import fast_is_isomorphic
 from cfgutils.similarity.ged.abu_aisheh_ged import (
-    ged_upperbound, graph_edit_distance_core_analysis, MAX_NODES_FOR_EXACT_GED, MIN_EXACT_TIME, MIN_UPPERBOUND_TIME
+    ged_upperbound, graph_edit_distance_core_analysis, MAX_NODES_FOR_EXACT_GED, MIN_EXACT_TIME, MIN_UPPERBOUND_TIME,
 )
 from cfgutils.regions import GraphRegion, RegionIdentifier
 from cfgutils.regions.utils import (
@@ -515,6 +516,11 @@ def cfg_edit_distance(
     :return:
     """
     src_cfg, dec_cfg = nx.DiGraph(src_cfg), nx.DiGraph(dec_cfg)
+
+    if fast_is_isomorphic(dec_cfg, src_cfg):
+        l.debug(f"Graphs are isomorphic! Returning 0...")
+        return 0
+
     cfged_score = 0
     curr_region_collapse = 0
     curr_region_estimates = 0
@@ -638,6 +644,7 @@ def cfg_edit_distance(
                 redo_structuring = False
                 continue
             else:
+                l.debug("Region size is too large for exact. This difference will be an approximation.")
                 curr_region_estimates += 1
 
         # In most graph expasions of a region, the region should have a single successor and be moderately sized.
