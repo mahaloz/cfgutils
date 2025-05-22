@@ -6,7 +6,14 @@ from typing import Union, Dict, Tuple
 import ailment
 import networkx as nx
 import angr
-from angr.analyses.decompiler.optimization_passes import DUPLICATING_OPTS, CONDENSING_OPTS
+from angr.analyses.decompiler.optimization_passes import DUPLICATING_OPTS, CONDENSING_OPTS, LoweredSwitchSimplifier
+
+HAS_PRESETS = True
+try:
+    from angr.analyses.decompiler import DECOMPILATION_PRESETS
+except ImportError:
+    DECOMPILATION_PRESETS = None
+    HAS_PRESETS = False
 
 from .prettyify_ail import stmt_to_pretty_text
 from cfgutils.data.generic_block import GenericBlock
@@ -84,11 +91,16 @@ def binary_to_ail_cfgs(
             func.name = func.name[:func.name.index(".")]
 
     # some optimizations can drastically change the structure of the CFG, so we should disable some if wanted
-    all_optimizations = angr.analyses.decompiler.optimization_passes.get_optimization_passes(
-        proj.arch, "linux"
-    )
+    if HAS_PRESETS:
+        dec_opts = DECOMPILATION_PRESETS["fast"].get_optimization_passes("AMD64", "linux",)
+    else:
+        dec_opts = angr.analyses.decompiler.optimization_passes.get_optimization_passes(
+            proj.arch, "linux"
+        )
     if not structuring_opts:
-        all_optimizations = [opt for opt in all_optimizations if opt not in DUPLICATING_OPTS + CONDENSING_OPTS]
+        dec_opts = [opt for opt in dec_opts if opt not in DUPLICATING_OPTS + CONDENSING_OPTS]
+        if LoweredSwitchSimplifier in dec_opts:
+            dec_opts.remove(LoweredSwitchSimplifier)
 
     # generate a cfg for each function
     ail_cfgs = {}
@@ -105,7 +117,7 @@ def binary_to_ail_cfgs(
         # for this function you don't actually need the linear decompilation, but we run through the entire
         # decompilation process to assure every optimization is run that would be done on a normal Clinic graph
         dec = proj.analyses.Decompiler(
-            f, cfg=cfg, kb=cfg.kb, optimization_passes=all_optimizations, generate_code=False,
+            f, cfg=cfg, kb=cfg.kb, optimization_passes=dec_opts, generate_code=False,
             options=_set_decompiler_option(decompiler_options)
         )
         dec.ail_graph.name = str(f.name)
