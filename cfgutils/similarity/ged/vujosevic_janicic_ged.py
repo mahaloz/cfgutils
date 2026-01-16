@@ -1,26 +1,61 @@
+import sys
+
 import networkx as nx
 
 from cfgutils.matrix.munkres import Munkres
-import sys
+from cfgutils.similarity.ged import INVALID_CHOICE_PENALTY
+
+
+class GraphCache:
+    def __init__(self, graph: nx.DiGraph):
+        self._graph = graph
+        self.nodes = list(graph.nodes)
+        self.node_count = len(self.nodes)
+        self.edge_count = len(graph.edges)
+        self.node_to_index = {node: i for i, node in enumerate(graph.nodes)}
+
+        self._parents = {node: list(graph.predecessors(node)) for node in graph.nodes}
+        self.parent_count = {node: len(parents) for node, parents in self._parents.items()}
+
+        self._children = {node: list(graph.successors(node)) for node in graph.nodes}
+        self.child_count = {node: len(children) for node, children in self._children.items()}
+
+    def get_parent(self, node, i):
+        return self._parents[node][i]
+
+    def parent_node_idx(self, node, parent_i):
+        return self.node_to_index[self.get_parent(node, parent_i)]
+
+    def get_child(self, node, i):
+        return self._children[node][i]
+
+    def child_node_idx(self, node, child_i):
+        return self.node_to_index[self.get_child(node, child_i)]
+
 
 class CFGSimED:
-    def __init__(self, print_steps=False, normalize=False):
+    def __init__(self, g1: nx.DiGraph, g2: nx.DiGraph, print_steps=False, normalize=False):
         self.__print_steps = print_steps
         self._normalize = normalize
         self.__inf = float('inf')
+
+        self._g1_graph = g1
+        self._g2_graph = g2
+        self._g1 = GraphCache(self._g1_graph)
+        self._g2 = GraphCache(self._g2_graph)
 
     def __count_common(self, l1, l2):
         l2_copy = list(l2)
         counter = 0
         for i in l1:
             if i in l2_copy:
-                counter+=1
+                counter += 1
                 l2_copy.remove(i)
         return counter
 
-    def __ED(self, g1, g2):
-        n = g1.get_node_count()
-        m = g2.get_node_count()
+    def __ED(self):
+        n = self._g1.node_count
+        m = self._g2.node_count
 
         cost_matrix = [None] * (n + m)
         for i in range(n + m):
@@ -40,19 +75,23 @@ class CFGSimED:
         for i in range(m):
             row = n + i
             col = i
-            node = g2.get_node(i)
+            node = self._g2.nodes[i]
+            parent_count = self._g2.parent_count[node]
+            child_count = self._g2.child_count[node]
             if self.__print_steps:
                 if i == 0:
-                    print("1 + " + str(node.get_parent_count()) + " + " + str(node.get_child_count()))
-            cost = 1 + node.get_parent_count() + node.get_child_count()
+                    print("1 + " + str(parent_count) + " + " + str(child_count))
+            cost = 1 + parent_count + child_count
             cost_matrix[row][col] = cost
 
         # Set the diagonal for the top right n x n matrix
         for i in range(n):
             row = i
             col = m + i
-            node = g1.get_node(i)
-            cost = 1 + node.get_parent_count() + node.get_child_count()
+            node = self._g1.nodes[i]
+            parent_count = self._g1.parent_count[node]
+            child_count = self._g1.child_count[node]
+            cost = 1 + parent_count + child_count
             cost_matrix[row][col] = cost
 
         # Set the top left n x m matrix
@@ -62,28 +101,40 @@ class CFGSimED:
                 CL2 = []
                 PL1 = []
                 PL2 = []
-                node1 = g1.get_node(row)
-                node2 = g2.get_node(col)
-                for child_index in range(node1.get_child_count()):
-                    #CL1.append(node1.getChild(child_index).color)
+                node1 = self._g1.nodes[row]
+                node2 = self._g2.nodes[col]
+                node1_child_count = self._g1.child_count[node1]
+                node2_child_count = self._g2.child_count[node2]
+                node1_parent_count = self._g1.parent_count[node1]
+                node2_parent_count = self._g2.parent_count[node2]
+
+                for child_index in range(node1_child_count):
                     CL1.append('1')
-                for child_index in range(node2.get_child_count()):
-                    #CL2.append(node2.getChild(child_index).color)
+                for child_index in range(node2_child_count):
                     CL2.append('1')
-                for parent_index in range(node1.get_parent_count()):
-                    #PL1.append(node1.getParent(parent_index).color)
+                for parent_index in range(node1_parent_count):
                     PL1.append('1')
-                for parent_index in range(node2.get_parent_count()):
-                    #PL2.append(node2.getParent(parent_index).color)
+                for parent_index in range(node2_parent_count):
                     PL2.append('1')
 
                 if self.__print_steps:
                     if row == col and row == 0:
-                        print (str(node1.get_child_count()) + " + " + str(node2.get_child_count()) + " - (2 * " + str(self.__count_common(CL1, CL2)) + ")")
-                        print (str(node1.get_parent_count()) + " + " + str(node2.get_parent_count()) + " - (2 * " + str(self.__count_common(PL1, PL2)) + ")")
+                        print(str(node1_child_count) + " + " + str(node2_child_count) + " - (2 * " + str(self.__count_common(CL1, CL2)) + ")")
+                        print(str(node1_parent_count) + " + " + str(node2_parent_count) + " - (2 * " + str(self.__count_common(PL1, PL2)) + ")")
 
-                cost = node1.get_child_count() + node2.get_child_count() - (2 * (self.__count_common(CL1, CL2)))
-                cost += node1.get_parent_count() + node2.get_parent_count() - (2 * (self.__count_common(PL1, PL2)))
+                cost = node1_child_count + node2_child_count - (2 * (self.__count_common(CL1, CL2)))
+                cost += node1_parent_count + node2_parent_count - (2 * (self.__count_common(PL1, PL2)))
+
+                # Penalize matching entry/exit nodes with non-entry/non-exit nodes
+                if node1.is_entrypoint and not node2.is_entrypoint:
+                    cost += INVALID_CHOICE_PENALTY
+                elif node1.is_exitpoint and not node2.is_exitpoint:
+                    cost += INVALID_CHOICE_PENALTY
+                elif node2.is_entrypoint and not node1.is_entrypoint:
+                    cost += INVALID_CHOICE_PENALTY
+                elif node2.is_exitpoint and not node1.is_exitpoint:
+                    cost += INVALID_CHOICE_PENALTY
+
                 cost_matrix[row][col] = cost
 
         if self.__print_steps:
@@ -95,11 +146,10 @@ class CFGSimED:
                         sys.stdout.write(" & ")
                 print(' \\\\')
 
-        m = Munkres()
+        munkres = Munkres()
 
-        indexes = m.compute(cost_matrix)
+        indexes = munkres.compute(cost_matrix)
 
-        #print_matrix(matrix, msg='Lowest cost through this matrix:')
         total = 0
         if self.__print_steps:
             print(indexes)
@@ -108,25 +158,30 @@ class CFGSimED:
             total += value
             if self.__print_steps:
                 print((row, column, value))
-            if self.__print_steps and row < g1.get_node_count() and column < g2.get_node_count():
-                print(g1.get_node(row).name + ' ' + g2.get_node(column).name)
-            elif self.__print_steps and row < g1.get_node_count():
-                print(g1.get_node(row).name + ' dummy')
-            elif self.__print_steps and column < g2.get_node_count():
-                print(g2.get_node(column).name + ' dummy')
+            if self.__print_steps and row < self._g1.node_count and column < self._g2.node_count:
+                node1 = self._g1.nodes[row]
+                node2 = self._g2.nodes[column]
+                print(str(node1) + ' ' + str(node2))
+            elif self.__print_steps and row < self._g1.node_count:
+                node1 = self._g1.nodes[row]
+                print(str(node1) + ' dummy')
+            elif self.__print_steps and column < self._g2.node_count:
+                node2 = self._g2.nodes[column]
+                print('dummy ' + str(node2))
         if self.__print_steps:
             print(('total cost:', total))
 
         if self._normalize:
-            simScore = 1 - (total / float(g1.get_node_count() + g1.get_edge_count() + g2.get_node_count() + g2.get_edge_count()))
+            simScore = 1 - (total / float(self._g1.node_count + self._g1.edge_count + self._g2.node_count + self._g2.edge_count))
         else:
             simScore = total
 
         return simScore
 
-    def sim(self, g1, g2):
-        return self.__ED(g1, g2)
+    def sim(self):
+        return self.__ED()
 
-def vj_ged(g1: nx.DiGraph, g2: nx.DiGraph[], print_steps=False):
-    ged = CFGSimED(g1, g2, print_steps=print_steps)
+
+def vj_ged(g1: nx.DiGraph, g2: nx.DiGraph, print_steps=False, normalize=False):
+    ged = CFGSimED(g1, g2, print_steps=print_steps, normalize=normalize)
     return ged.sim()
