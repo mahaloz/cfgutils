@@ -215,7 +215,8 @@ class CFGSimNM:
                             print("s_out / " + str(float(max(no_of_out_neighbors1, no_of_out_neighbors2))) + " = " + str(out_neighbor_sim))
                     else:
                         out_neighbor_sim = 1
-            
+
+                    # TODO: the contrastByInstr part should be self.relable_cost, but us
                     #sim[i][j] = sqrt(n1.contrastByInstr(n2) * float(in_neighbor_sim + out_neighbor_sim) / 2)
                     sim[i][j] = float(in_neighbor_sim + out_neighbor_sim) / 2
             
