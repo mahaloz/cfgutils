@@ -27,4 +27,5 @@ from cfgutils.similarity.ged.abu_aisheh_ged import (
 )
 from cfgutils.similarity.ged.basque_cfged import cfg_edit_distance
 from cfgutils.similarity.ged.hu_cfged import hu_cfged
+from cfgutils.similarity.ged.vujosevic_janicic_ged import vj_ged
 from cfgutils.similarity.block_matcher_base import BlockMatcherBase

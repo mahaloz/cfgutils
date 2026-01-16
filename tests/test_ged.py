@@ -5,6 +5,7 @@ from cfgutils.data import numbered_edges_to_block_graph
 from cfgutils.similarity.ged.abu_aisheh_ged import ged_exact, ged_max, ged_explained
 from cfgutils.similarity.ged.basque_cfged import cfg_edit_distance
 from cfgutils.similarity.ged.hu_cfged import hu_cfged
+from cfgutils.similarity.ged.vujosevic_janicic_ged import vj_ged
 
 
 class TestGraphEditDistance(unittest.TestCase):
@@ -112,6 +113,16 @@ class TestHuCFGED(unittest.TestCase):
         max_score = ged_max(g1, g2)
         print(f"score={score}, real_score={real_score}, max_score={max_score}")
         assert real_score <= score <= max_score
+
+class TestVJGED(unittest.TestCase):
+    def test_cross_jump_graphs(self):
+        g1, g2 = CROSS_JUMP_OPT_GRAPHS
+        score = vj_ged(g1, g2)
+        real_score = ged_exact(g1, g2)
+        max_score = ged_max(g1, g2)
+        print(f"score={score}, real_score={real_score}, max_score={max_score}")
+        assert real_score <= score <= max_score
+
 #
 # Some common graphs used among testcases
 #
